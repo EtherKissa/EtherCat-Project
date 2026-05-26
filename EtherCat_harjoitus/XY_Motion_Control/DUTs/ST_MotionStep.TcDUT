@@ -1,0 +1,18 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <DUT Name="ST_MotionStep" Id="{c558b0b0-c766-4ec8-962e-e3e446a5acc6}">
+    <Declaration><![CDATA[TYPE ST_MotionStep :
+STRUCT
+	fTargetX			: LREAL;	// Destination for X axis
+	fTargetY			: LREAL;	// Destination for Y axis
+	bMoveYfirst			: BOOL;		// If TRUE: Y reaches target before X axis starts its movement if FALSE: X moves first
+	bUseClearance		: BOOL;		// If TRUE: Pull back X axis back to 2.8000 clearance before plunging Y axis to its coordinates
+	
+	// Lifter Phase Commands for this step
+	bLifterUpBeforeMove : BOOL; // If TRUE: Lift up BEFORE driving axes
+	bLifterDownAtTarget : BOOL; // If TRUE: Drop down ONCE AT TARGET destination
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>
