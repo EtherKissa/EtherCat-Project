@@ -3,18 +3,22 @@
   <POU Name="PRG_Hardware" Id="{40a14d8f-cfdd-4224-908d-284dff0c3583}" SpecialFunc="None">
     <Declaration><![CDATA[PROGRAM PRG_Hardware
 VAR
-	// Central Execution Control Flags
+	// Clean targeting registers used strictly by the active sequencer
 	ExecuteMoveX       : BOOL; 
 	ExecuteMoveY       : BOOL; 
 	TargetX            : LREAL;
 	TargetY            : LREAL;
+	bSequenceResetPulse : BOOL;
 	
-	// Power, Reset, and Calibration Instances
+	// Real physical motion instance calls: Power, Reset, and Calibration
 	fbPower1           : MC_Power;
 	fbPower2           : MC_Power;
 	fbReset1           : MC_Reset;
 	fbReset2           : MC_Reset;
+	fbAutoMoveX        : MC_MoveAbsolute;
+	fbAutoMoveY        : MC_MoveAbsolute;
 	
+	// Homing Sequences
 	fbDriveToSensorX   : MC_MoveVelocity;
 	fbDriveToSensorY   : MC_MoveVelocity;
 	fbStopX            : MC_Stop;
@@ -22,75 +26,13 @@ VAR
 	fbLockZeroX        : MC_SetPosition;
 	fbLockZeroY        : MC_SetPosition;
 	
-	// Production Automation Instances
-	fbAutoMoveX        : MC_MoveAbsolute;
-	fbAutoMoveY        : MC_MoveAbsolute;
-	
-	// Virtual Sensor Timers for Sensorless Pneumatics
-	tLifterRiseTimer   : TON; 
-	tLifterLowerTimer  : TON; 
-	
-	// Initialization Flag
-	bFirstScanDone     : BOOL := FALSE;
+	// Universal timers
+	bFirstScanDone		: BOOL := FALSE;
+	tPneumaticDelay		: TON;
+
 END_VAR]]></Declaration>
     <Implementation>
-      <ST><![CDATA[// =========================================================
-// 0. POWER-ON INITIALIZATION (FIRST PLC SCAN ONLY)
-// =========================================================
-IF NOT bFirstScanDone THEN
-	GVL_Motion.bEnableAll    := TRUE;
-	
-	GVL_Motion.bResetAll     := FALSE;
-	GVL_Motion.bStartHoming  := FALSE;
-	GVL_Motion.bXHomed       := FALSE;
-	GVL_Motion.bYHomed       := FALSE;
-	GVL_Motion.nAutoState    := 0;
-	GVL_Motion.bStartAutoseq := FALSE;
-	GVL_Motion.bAutoseqDone  := FALSE;
-	
-	bFirstScanDone           := TRUE;
-END_IF
-
-
-// =========================================================
-// READ LIVE POSITIONS OF X AND Y
-// =========================================================
-GVL_Motion.fCurrentX := GVL_Motion.Axis1.NcToPlc.ActPos;
-GVL_Motion.fCurrentY := GVL_Motion.Axis2.NcToPlc.ActPos; 
-
-
-// =========================================================
-// SAFETY BOUNDS FOR X AND Y (WITH HOMING OVERRIDE BYPASS)
-// =========================================================
-IF GVL_Motion.bStartHoming THEN
-	// Force safety gates TRUE during homing calibration so raw axes can move.
-	GVL_Motion.bX_Allow_Negative := TRUE;
-	GVL_Motion.bX_Allow_Positive := TRUE;
-	GVL_Motion.bY_Allow_Negative := TRUE;
-	GVL_Motion.bY_Allow_Positive := TRUE;
-ELSE
-	// Standard Operational Limits (Active outside of homing cycle)
-	GVL_Motion.bX_Allow_Negative := (GVL_Motion.fCurrentX > -0.1);
-
-	IF GVL_Motion.fCurrentY <= -30.0 THEN
-		GVL_Motion.bX_Allow_Positive := (GVL_Motion.fCurrentX < 12.0); 
-	ELSE
-		GVL_Motion.bX_Allow_Positive := (GVL_Motion.fCurrentX < 10.1); 
-	END_IF
-
-	GVL_Motion.bY_Allow_Negative := (GVL_Motion.fCurrentY > -34.0);
-
-	IF GVL_Motion.fCurrentX >= 10.1 THEN
-		GVL_Motion.bY_Allow_Positive := (GVL_Motion.fCurrentY < -30.0); 
-	ELSE
-		GVL_Motion.bY_Allow_Positive := (GVL_Motion.fCurrentY < 0.0);    
-	END_IF
-END_IF
-
-
-// =========================================================
-// 1. SYSTEM POWER & FAULT RESETS
-// =========================================================
+      <ST><![CDATA[// 1. MC_Power Engine Hooks (Fed directly from PRG_Safety calculations)
 fbPower1(
 	Axis 				:= GVL_Motion.Axis1,
 	Enable 				:= GVL_Motion.bEnableAll,
@@ -103,13 +45,15 @@ fbPower2(
 	Enable_Positive 	:= GVL_Motion.bEnableAll AND GVL_Motion.bY_Allow_Positive,
 	Enable_Negative 	:= GVL_Motion.bEnableAll AND GVL_Motion.bY_Allow_Negative); 
 
-fbReset1(Axis := GVL_Motion.Axis1, Execute := GVL_Motion.bResetAll);
-fbReset2(Axis := GVL_Motion.Axis2, Execute := GVL_Motion.bResetAll);
+fbReset1(
+	Axis := GVL_Motion.Axis1,
+	Execute := GVL_Motion.bResetAll);
+	
+fbReset2(
+	Axis := GVL_Motion.Axis2,
+	Execute := GVL_Motion.bResetAll);
 
-
-// =========================================================
 // 2. AXIS X HOMING LOOP
-// =========================================================
 fbDriveToSensorX(
 	Axis      := GVL_Motion.Axis1,
 	Execute   := GVL_Motion.bStartHoming AND NOT GVL_Motion.bSensor_X AND NOT GVL_Motion.bXHomed AND NOT fbStopX.Execute,
@@ -126,10 +70,7 @@ fbLockZeroX(
 	Position := 0.0,
 	Mode     := FALSE);
 
-
-// =========================================================
 // 3. AXIS Y HOMING LOOP
-// =========================================================
 fbDriveToSensorY(
 	Axis      := GVL_Motion.Axis2,
 	Execute   := GVL_Motion.bStartHoming AND NOT GVL_Motion.bSensor_Y AND NOT GVL_Motion.bYHomed AND NOT fbStopY.Execute,
@@ -146,20 +87,14 @@ fbLockZeroY(
 	Position := 0.0,
 	Mode     := FALSE);
 
-
-// =========================================================
 // 4. COORDINATION HANDSHAKE & PERMANENT LATCHING
-// =========================================================
-IF fbLockZeroX.Done THEN
-	GVL_Motion.bXHomed := TRUE;
+IF fbLockZeroX.Done THEN GVL_Motion.bXHomed := TRUE;
 END_IF
 
-IF fbLockZeroY.Done THEN
-	GVL_Motion.bYHomed := TRUE;
+IF fbLockZeroY.Done THEN GVL_Motion.bYHomed := TRUE;
 END_IF
 
-IF GVL_Motion.bXHomed AND GVL_Motion.bYHomed THEN
-	GVL_Motion.bStartHoming := FALSE; 
+IF GVL_Motion.bXHomed AND GVL_Motion.bYHomed THEN GVL_Motion.bStartHoming := FALSE; 
 END_IF
 
 IF NOT GVL_Motion.bStartHoming THEN
@@ -169,165 +104,172 @@ IF NOT GVL_Motion.bStartHoming THEN
 	fbLockZeroY(Axis := GVL_Motion.Axis2, Execute := FALSE);
 END_IF
 
-
-// =========================================================
-// 5. DATA-DRIVEN MOTION ENGINE (FORKLIFT SIMULATION RUN)
-// =========================================================
-// FIXED: Wrapped the case block cleanly inside its required automation execution conditional gates
+// 5. 4-state automated sequence
 IF GVL_Motion.bStartAutoseq AND GVL_Motion.bXHomed AND GVL_Motion.bYHomed AND NOT GVL_Motion.bManualModeActive THEN
+	// Reset old commands
+	bSequenceResetPulse	:= FALSE;
 
+	IF GVL_Motion.nStepPointer <= GVL_Motion.nTotalSteps THEN
+		
 	CASE GVL_Motion.nSubPhase OF
+			
+			0: // STATE 0: PNEUMATIC DETERMINATION 
+				tPneumaticDelay(IN := FALSE); 
 				
-		0: // --- PHASE 0: RESET AND PREPARE FOR NEXT SHELF ---
-			ExecuteMoveX := FALSE; 
-			ExecuteMoveY := FALSE; 
-			tLifterRiseTimer(IN := FALSE);
-			tLifterLowerTimer(IN := FALSE);
-			
-			IF GVL_Motion.nStepPointer <= GVL_Motion.nTotalSteps THEN
-				GVL_Motion.nSubPhase := 5; // Start sequence for the current shelf
-			ELSE
-				GVL_Motion.nSubPhase := 90; // All 4 shelves finished, head safely to home base
-			END_IF
-			
-		5: // --- PHASE 5: PRE-POSITION OVER SHELF ROW (X AXIS FIRST) ---
-			// Move X out to line up with the shelf face at the 2.8 aisle clearance mark
-			TargetX := 2.8000; 
-			TargetY := GVL_Motion.fCurrentY;
-			ExecuteMoveX := TRUE;
-			ExecuteMoveY := FALSE;
-			
-			IF fbAutoMoveX.Done AND NOT fbAutoMoveX.Busy THEN
-				ExecuteMoveX := FALSE;
-				GVL_Motion.nSubPhase := 10;
-			END_IF
-
-		10: // --- PHASE 10: ALIGN VERTICAL HEIGHT (Y AXIS SECOND) ---
-			// Now that X is safely at the aisle line, move Y to the target shelf height
-			TargetX := GVL_Motion.fCurrentX;
-			TargetY := GVL_Motion.astPath[GVL_Motion.nStepPointer].fTargetY;
-			ExecuteMoveX := FALSE;
-			ExecuteMoveY := TRUE;
-			
-			IF fbAutoMoveY.Done AND NOT fbAutoMoveY.Busy THEN
-				ExecuteMoveY := FALSE;
-				GVL_Motion.nSubPhase := 15;
-			END_IF
-
-		15: // --- PHASE 15: RAISE FORKLIFT FOR ENTRY CLEARANCE ---
-			// Raise forks to safely hold the pallet above the shelf beam
-			GVL_Motion.bZlifter := TRUE; 
-			tLifterRiseTimer(IN := TRUE, PT := T#1500MS);
-			
-			IF tLifterRiseTimer.Q THEN
-				tLifterRiseTimer(IN := FALSE); 
-				GVL_Motion.nSubPhase := 20; // Forks are proven UP
-			END_IF
-
-		20: // --- PHASE 20: DRIVE FORKS INTO SHELF (X EXTENSION) ---
-			// Push the forks deep into the slot to deposit the pallet
-			TargetX := GVL_Motion.astPath[GVL_Motion.nStepPointer].fTargetX;
-			TargetY := GVL_Motion.fCurrentY;
-			ExecuteMoveX := TRUE;
-			ExecuteMoveY := FALSE;
-			
-			IF fbAutoMoveX.Done AND NOT fbAutoMoveX.Busy THEN
-				ExecuteMoveX := FALSE;
-				GVL_Motion.nSubPhase := 30;
-			END_IF
-
-		30: // --- PHASE 30: LOWER FORKLIFT TO PLACE PALLET ---
-			// Lower forks down to set the pallet onto the shelf rails
-			GVL_Motion.bZlifter := FALSE; 
-			tLifterLowerTimer(IN := TRUE, PT := T#1500MS);
-			
-			IF tLifterLowerTimer.Q THEN
-				tLifterLowerTimer(IN := FALSE); 
-				GVL_Motion.nSubPhase := 40; // Forks are proven DOWN
-			END_IF
-
-		40: // --- PHASE 40: RETREAT TO SAFE CLEARANCE DISTANCE ---
-			// Safely extract the empty forks straight back out to the 2.8 aisle line
-			TargetX := 2.8000;
-			TargetY := GVL_Motion.fCurrentY; // Lock Y completely still
-			ExecuteMoveX := TRUE;
-			ExecuteMoveY := FALSE;
-			
-			IF fbAutoMoveX.Done AND NOT fbAutoMoveX.Busy THEN
-				ExecuteMoveX := FALSE;
-				GVL_Motion.nSubPhase := 45;
-			END_IF
-
-		45: // --- PHASE 45: POST-RETREAT FORK LIFT ROUTINE ---
-			// Now that we are back at 2.8, raise the forklift back to travelling height
-			GVL_Motion.bZlifter := TRUE;
-			tLifterRiseTimer(IN := TRUE, PT := T#1500MS);
-			
-			IF tLifterRiseTimer.Q THEN
-				tLifterRiseTimer(IN := FALSE);
-				// This shelf is 100% complete. Advance pointer to next shelf and restart loop
-				GVL_Motion.nStepPointer := GVL_Motion.nStepPointer + 1;
-				GVL_Motion.nSubPhase := 0; 
-			END_IF
-
-		90: // --- PHASE 90: RETRACT Y HEIGHT FIRST FOR HOME RUN SAFETY ---
-			// FIXED: We pull Y back up to 0.0 while still safe at the 2.8 aisle line.
-			// This prevents hitting pocket software limits when coming back from deep shelves.
-			TargetX := GVL_Motion.fCurrentX;
-			TargetY := 0.0;
-			ExecuteMoveX := FALSE;
-			ExecuteMoveY := TRUE;
-			
-			IF fbAutoMoveY.Done AND NOT fbAutoMoveY.Busy THEN
-				ExecuteMoveY := FALSE;
-				GVL_Motion.nSubPhase := 95;
-			END_IF
-
-		95: // --- PHASE 95: RETURN X TO HOME BASE LAST ---
-			TargetX := 0.0;
-			TargetY := GVL_Motion.fCurrentY;
-			ExecuteMoveX := TRUE;
-			ExecuteMoveY := FALSE;
-			
-			IF fbAutoMoveX.Done AND NOT fbAutoMoveX.Busy THEN
-				ExecuteMoveX := FALSE;
-				GVL_Motion.bZlifter := FALSE; // Drop forks to rest at home base
+				IF GVL_Motion.astPath[GVL_Motion.nStepPointer].nZAction = GVL_Motion.FORKS_UP THEN
+					GVL_Motion.bZlifter := FALSE; // Lift the pneumatics
+					GVL_Motion.nSubPhase := 5; 
+				ELSIF GVL_Motion.astPath[GVL_Motion.nStepPointer].nZAction = GVL_Motion.FORKS_DOWN THEN
+					GVL_Motion.bZlifter := TRUE;  // Lower the pneumatics
+					GVL_Motion.nSubPhase := 5; 
+				ELSE
+					GVL_Motion.nSubPhase := 10; // No action needed, skip to travel
+				END_IF
 				
-				// Entire warehouse simulation run complete!
-				GVL_Motion.bAutoseqDone := TRUE;
-				GVL_Motion.bStartAutoseq := FALSE;
-				GVL_Motion.nStepPointer := 1;
-				GVL_Motion.nSubPhase := 0;
-			END_IF
-			
+			5: // STATE 5: PNEUMATIC DWELL, delay to allow for setting
+				tPneumaticDelay(IN := TRUE, PT := T#1500MS);
+				IF tPneumaticDelay.Q THEN
+					tPneumaticDelay(IN := FALSE);
+					GVL_Motion.nSubPhase := 10; 
+				END_IF
+				
+			10: // STATE 10: EXECUTE AXIS POSITIONING
+				IF GVL_Motion.nStepPointer = GVL_Motion.nTotalSteps THEN
+					ExecuteMoveX := FALSE;
+					ExecuteMoveY := FALSE;
+					GVL_Motion.nSubPhase := 80; // Head to Home sub-routines
+					
+				// Anti-collision interlocking
+				ELSIF GVL_Motion.fCurrentX > 2.85 AND GVL_Motion.fCurrentY <> GVL_Motion.astPath[GVL_Motion.nStepPointer].fTargetY THEN
+					TargetX := GVL_Motion.fCurrentX; 
+					TargetY := GVL_Motion.astPath[GVL_Motion.nStepPointer].fTargetY;
+					ExecuteMoveX := FALSE;
+					ExecuteMoveY := TRUE;
+				ELSE
+					TargetX := GVL_Motion.astPath[GVL_Motion.nStepPointer].fTargetX;
+					TargetY := GVL_Motion.astPath[GVL_Motion.nStepPointer].fTargetY;
+					ExecuteMoveX := TRUE;
+					ExecuteMoveY := TRUE; 
+				END_IF
+				
+				// Wait for standard step completion
+				IF GVL_Motion.nSubPhase = 10 AND 
+				   (NOT ExecuteMoveX OR (fbAutoMoveX.Done AND NOT fbAutoMoveX.Busy)) AND
+				   (NOT ExecuteMoveY OR (fbAutoMoveY.Done AND NOT fbAutoMoveY.Busy)) THEN
+					
+					ExecuteMoveX := FALSE;
+					ExecuteMoveY := FALSE;
+					GVL_Motion.nStepPointer := GVL_Motion.nStepPointer + 1; 
+					GVL_Motion.nSubPhase := 0; 
+				END_IF
+
+			80: // STATE 80: SAFE HOME RETURN - RETRACT X FIRST
+				// Get out of the shelf slot completely before changing Y heights
+				TargetX := 2.8000;
+				TargetY := GVL_Motion.fCurrentY;
+				ExecuteMoveX := TRUE;
+				ExecuteMoveY := FALSE;
+				
+				IF fbAutoMoveX.Done AND NOT fbAutoMoveX.Busy THEN
+					ExecuteMoveX := FALSE;
+					GVL_Motion.nSubPhase := 85;
+				END_IF
+
+			85: // STATE 85: SAFE HOME RETURN - CLEAR Y LEVEL TO FLOOR
+				// Now that X is safely back at the aisle line, bring Y back up to ground level
+				TargetX := GVL_Motion.fCurrentX;
+				TargetY := 0.0;
+				ExecuteMoveX := FALSE;
+				ExecuteMoveY := TRUE;
+				
+				IF fbAutoMoveY.Done AND NOT fbAutoMoveY.Busy THEN
+					ExecuteMoveY := FALSE;
+					GVL_Motion.nSubPhase := 88;
+				END_IF
+
+			88: // STATE 88: SAFE HOME RETURN - DRIVE X TO PARKING SPOT
+				// With Y at 0.0, the safety boundaries open wide, allowing X to park perfectly at 0.0
+				TargetX := 0.0;
+				TargetY := GVL_Motion.fCurrentY;
+				ExecuteMoveX := TRUE;
+				ExecuteMoveY := FALSE;
+				
+				IF fbAutoMoveX.Done AND NOT fbAutoMoveX.Busy THEN
+					ExecuteMoveX := FALSE;
+					GVL_Motion.bZlifter := FALSE; // Put forks in resting state
+					
+					// Entire run fully completed and parked
+					GVL_Motion.bAutoseqDone := TRUE;
+					GVL_Motion.bStartAutoseq := FALSE;
+					GVL_Motion.nStepPointer := 1;
+					GVL_Motion.nSubPhase := 0;
+				END_IF
+				
 	END_CASE
+		
+	ELSE
+		// Run complete, clear out variables cleanly
+		GVL_Motion.bAutoseqDone := TRUE;
+		GVL_Motion.bStartAutoseq := FALSE; 
+		GVL_Motion.nStepPointer := 1;
+		GVL_Motion.nSubPhase := 0;
+	END_IF
 
 ELSE
-	// Global Safety Reset Anchor 
 	ExecuteMoveX := FALSE;
 	ExecuteMoveY := FALSE;
-	tLifterRiseTimer(IN := FALSE);
-	tLifterLowerTimer(IN := FALSE);
+	tPneumaticDelay(IN := FALSE);
+	
+	// If bStartAutoseq is turned off, trigger bSequenceResetPulse high for EXACTLY one scan cycle,
+	// then drop it back down. This cleans the FB registers completely without latching them shut.
+	IF NOT GVL_Motion.bAutoseqDone THEN
+		bSequenceResetPulse := TRUE;
+	ELSE
+		bSequenceResetPulse := FALSE;
+	END_IF
 END_IF
 
-
-// =========================================================
-// CENTRAL MOTION ENGINE HOOKS (INTERLOCKED WITH MANUAL BYPASS)
-// =========================================================
+// 6. FINAL CENTRALIZED SYSTEM HOOK OUTPUTS
 fbAutoMoveX(
 	Axis     := GVL_Motion.Axis1,
-	Execute  := ExecuteMoveX AND NOT GVL_Motion.bManualModeActive, 
+	Execute  := ExecuteMoveX AND NOT GVL_Motion.bManualModeActive AND NOT bSequenceResetPulse, 
 	Position := TargetX,
 	Velocity := 5.0);
 	
 fbAutoMoveY(
 	Axis     := GVL_Motion.Axis2,
-	Execute  := ExecuteMoveY AND NOT GVL_Motion.bManualModeActive, 
+	Execute  := ExecuteMoveY AND NOT GVL_Motion.bManualModeActive AND NOT bSequenceResetPulse, 
 	Position := TargetY,
 	Velocity := 10.0);]]></ST>
     </Implementation>
     <LineIds Name="PRG_Hardware">
-      <LineId Id="3526" Count="289" />
+      <LineId Id="3582" Count="13" />
+      <LineId Id="4000" Count="2" />
+      <LineId Id="3596" Count="0" />
+      <LineId Id="4003" Count="1" />
+      <LineId Id="3599" Count="1" />
+      <LineId Id="3602" Count="14" />
+      <LineId Id="3619" Count="1" />
+      <LineId Id="3622" Count="14" />
+      <LineId Id="3639" Count="1" />
+      <LineId Id="3642" Count="0" />
+      <LineId Id="3644" Count="2" />
+      <LineId Id="3648" Count="2" />
+      <LineId Id="3652" Count="7" />
+      <LineId Id="3821" Count="1" />
+      <LineId Id="3824" Count="0" />
+      <LineId Id="3988" Count="0" />
+      <LineId Id="3990" Count="0" />
+      <LineId Id="3825" Count="2" />
+      <LineId Id="3889" Count="3" />
+      <LineId Id="3894" Count="18" />
+      <LineId Id="3914" Count="70" />
+      <LineId Id="3875" Count="13" />
+      <LineId Id="4005" Count="6" />
+      <LineId Id="3991" Count="0" />
+      <LineId Id="3800" Count="0" />
+      <LineId Id="3802" Count="0" />
+      <LineId Id="3805" Count="10" />
       <LineId Id="770" Count="0" />
     </LineIds>
   </POU>

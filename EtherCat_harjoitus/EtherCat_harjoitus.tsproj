@@ -1744,11 +1744,20 @@ External Setpoint Generation:
 		</Motion>
 		<Plc>
 			<Project GUID="{02AB9690-0BAD-46EA-9038-AEAD0D446227}" Name="XY_Motion_Control" PrjFilePath="XY_Motion_Control\XY_Motion_Control.plcproj" TmcFilePath="XY_Motion_Control\XY_Motion_Control.tmc" ReloadTmc="true" AmsPort="851" FileArchiveSettings="#x000e" SymbolicMapping="true">
-				<Instance Id="#x08502000" TcSmClass="TComPlcObjDef" KeepUnrestoredLinks="1" TmcPath="XY_Motion_Control\XY_Motion_Control.tmc" TmcHash="{F608AFF8-6321-9857-3745-71734DB07B42}">
+				<Instance Id="#x08502000" TcSmClass="TComPlcObjDef" KeepUnrestoredLinks="1" TmcPath="XY_Motion_Control\XY_Motion_Control.tmc" TmcHash="{0ACA314B-C7DE-8507-BADE-E07E73DB8520}">
 					<Name>Motion_Control</Name>
 					<CLSID ClassFactory="TcPlc30">{08500001-0000-0000-F000-000000000064}</CLSID>
 					<Vars VarGrpType="1">
 						<Name>PlcTask Inputs</Name>
+						<Var>
+							<Name>GVL_Motion.bSensor_X</Name>
+							<Comment><![CDATA[ Homing inputs & status]]></Comment>
+							<Type>BOOL</Type>
+						</Var>
+						<Var>
+							<Name>GVL_Motion.bSensor_Y</Name>
+							<Type>BOOL</Type>
+						</Var>
 						<Var>
 							<Name>GVL_Motion.Axis1.NcToPlc</Name>
 							<Type GUID="{25521FAA-EA5F-4C7F-8864-BBCCDACD2E98}" Namespace="MC">NCTOPLC_AXIS_REF</Type>
@@ -1770,7 +1779,7 @@ External Setpoint Generation:
 						</Var>
 						<Var>
 							<Name>GVL_Motion.bZlifter</Name>
-							<Comment><![CDATA[ Forklift Lift Solenoid (TRUE = Forks Raised, FALSE = Forks Lowered)]]></Comment>
+							<Comment><![CDATA[ Forklift Lift]]></Comment>
 							<Type>BOOL</Type>
 						</Var>
 					</Vars>
@@ -1779,14 +1788,6 @@ External Setpoint Generation:
 							<OwnerB Name="TIID^Device 2 (EtherCAT)^Term 1 (EK1200)^Term 2 (EL1008)">
 								<Link VarA="GVL_IO.Anturi_X" TypeA="BOOL" InOutA="0" GuidA="{18071995-0000-0000-0000-000000000030}" VarB="Channel 1^Input" Size="1" RestoreInfo="ANotFound"/>
 								<Link VarA="GVL_IO.Anturi_Y" TypeA="BOOL" InOutA="0" GuidA="{18071995-0000-0000-0000-000000000030}" VarB="Channel 3^Input" Size="1" RestoreInfo="ANotFound"/>
-							</OwnerB>
-						</OwnerA>
-					</UnrestoredVarLinks>
-					<UnrestoredVarLinks ImportTime="2026-05-26T10:58:51">
-						<OwnerA Name="InputDst" Prefix="TIPC^XY_Motion_Control^Motion_Control" Type="1">
-							<OwnerB Name="TIID^Device 2 (EtherCAT)^Term 1 (EK1200)^Term 2 (EL1008)">
-								<Link VarA="GVL_Motion.bSensor_X" TypeA="BOOL" InOutA="0" GuidA="{18071995-0000-0000-0000-000000000030}" VarB="Channel 1^Input" Size="1" RestoreInfo="ANotFound"/>
-								<Link VarA="GVL_Motion.bSensor_Y" TypeA="BOOL" InOutA="0" GuidA="{18071995-0000-0000-0000-000000000030}" VarB="Channel 3^Input" Size="1" RestoreInfo="ANotFound"/>
 							</OwnerB>
 						</OwnerA>
 					</UnrestoredVarLinks>
@@ -2714,6 +2715,10 @@ External Setpoint Generation:
 			</OwnerB>
 		</OwnerA>
 		<OwnerA Name="TIPC^XY_Motion_Control^Motion_Control">
+			<OwnerB Name="TIID^Device 2 (EtherCAT)^Term 1 (EK1200)^Term 2 (EL1008)">
+				<Link VarA="PlcTask Inputs^GVL_Motion.bSensor_X" VarB="Channel 1^Input"/>
+				<Link VarA="PlcTask Inputs^GVL_Motion.bSensor_Y" VarB="Channel 3^Input"/>
+			</OwnerB>
 			<OwnerB Name="TIID^Device 2 (EtherCAT)^Term 1 (EK1200)^Term 3 (EL2008)">
 				<Link VarA="PlcTask Outputs^GVL_Motion.bZlifter" VarB="Channel 2^Output"/>
 			</OwnerB>

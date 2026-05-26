@@ -1,0 +1,46 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="PRG_Safety" Id="{dbf17777-a47e-4342-9676-c1b71cee7ed2}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM PRG_Safety
+VAR
+	//This program has NO local variables. It purely updates GVL safety flags.
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[// 1. Refresh live position from the NC kernel
+GVL_Motion.fCurrentX := GVL_Motion.Axis1.NcToPlc.ActPos;
+GVL_Motion.fCurrentY := GVL_Motion.Axis2.NcToPlc.ActPos; 
+
+// 2. Evaluate Dynamic ASRS Clearance Envelopes
+IF GVL_Motion.bStartHoming THEN
+	// Fully open gates during initial homing calibration routines
+	GVL_Motion.bX_Allow_Negative := TRUE;
+	GVL_Motion.bX_Allow_Positive := TRUE;
+	GVL_Motion.bY_Allow_Negative := TRUE;
+	GVL_Motion.bY_Allow_Positive := TRUE;
+ELSE
+	// Standard Operational Limits (Active outside of homing cycle)
+	GVL_Motion.bX_Allow_Negative := (GVL_Motion.fCurrentX > -0.1);
+
+	IF GVL_Motion.fCurrentY <= -30.0 THEN
+		GVL_Motion.bX_Allow_Positive := (GVL_Motion.fCurrentX < 12.0); 
+	ELSE
+		GVL_Motion.bX_Allow_Positive := (GVL_Motion.fCurrentX < 10.1); 
+	END_IF
+
+	GVL_Motion.bY_Allow_Negative := (GVL_Motion.fCurrentY > -34.0);
+
+	IF GVL_Motion.fCurrentX >= 10.1 THEN
+		GVL_Motion.bY_Allow_Positive := (GVL_Motion.fCurrentY < -30.0); 
+	ELSE
+		GVL_Motion.bY_Allow_Positive := (GVL_Motion.fCurrentY < 0.0);    
+	END_IF
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="PRG_Safety">
+      <LineId Id="9" Count="3" />
+      <LineId Id="16" Count="23" />
+      <LineId Id="5" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

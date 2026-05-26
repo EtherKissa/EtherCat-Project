@@ -3,53 +3,80 @@
   <GVL Name="GVL_Motion" Id="{334edcf4-0254-40d8-9507-d80049dfbc5a}">
     <Declaration><![CDATA[{attribute 'qualified_only'}
 VAR_GLOBAL
+	// Hardware axis references Axis1 = X, Axis2 = Y
 	Axis1           : AXIS_REF;
 	Axis2           : AXIS_REF;
 	
+	// Core system control flags
 	bEnableAll      : BOOL := TRUE; 
-	bResetAll       : BOOL := FALSE; 
-	bSensor_X       : BOOL; 
-	bSensor_Y       : BOOL; 
+	bResetAll       : BOOL := FALSE;
+	bManualModeActive : BOOL := FALSE; 
 	
+	// Homing inputs & status
+	bSensor_X       AT %I* : BOOL; 
+	bSensor_Y       AT %I* : BOOL;
 	bStartHoming    : BOOL := FALSE; 
 	bXHomed         : BOOL := FALSE; 
 	bYHomed         : BOOL := FALSE; 
 
+	// Live position registers
 	fCurrentX       : LREAL := 0.0;
 	fCurrentY       : LREAL := 0.0;
 
-	nAutoState      : INT := 0; 
-	bStartAutoseq   : BOOL := FALSE;
-	bAutoseqDone    : BOOL := FALSE;
+	// Hardware IO ouputs
+	bZlifter        AT %Q* : BOOL;      // Forklift Lift
 	
-	bZlifter        AT %Q* : BOOL;      // Forklift Lift Solenoid (TRUE = Forks Raised, FALSE = Forks Lowered)
-	
-	bManualModeActive : BOOL := FALSE;  
-	
+	// UI Manual Jog signals & variables
 	bJogForwardX    : BOOL := FALSE;    
 	bJogForwardY    : BOOL := FALSE;    
 	bJogBackwardsX  : BOOL := FALSE;    
-	bJogBackwardsY  : BOOL := FALSE;    
-	
+	bJogBackwardsY  : BOOL := FALSE;
 	fVelocityX      : LREAL;
 	fVelocityY      : LREAL;
 	
+	// Dynamically calculated safety gates (calculated by PRG_Safety)
 	bX_Allow_Positive   : BOOL := FALSE;
 	bX_Allow_Negative   : BOOL := FALSE;
 	bY_Allow_Positive   : BOOL := FALSE;
 	bY_Allow_Negative   : BOOL := FALSE;
-
-	// Automated Warehouse Tracking
-	nStepPointer     : INT := 1;  // Current Target Shelf (1 to 4)
-	nSubPhase        : INT := 0;  // Current Step in the Forklift Drop-off Sequence
-	nTotalSteps      : INT := 4;  // Total number of shelves to process
 	
-	// The 4 Shelf Targets (Forks enter deep into X, at various Y shelf heights)
-	astPath : ARRAY[1..4] OF ST_MotionStep := [
-		(fTargetX := 9.3720,  fTargetY := -0.6247,  bMoveYFirst := TRUE,  bUseClearance := TRUE),  // Shelf 1
-		(fTargetX := 9.3720,  fTargetY := -9.5381,  bMoveYFirst := TRUE,  bUseClearance := TRUE),  // Shelf 2
-		(fTargetX := 9.3720,  fTargetY := -18.7514, bMoveYFirst := TRUE,  bUseClearance := TRUE),  // Shelf 3
-		(fTargetX := 9.1100,  fTargetY := -34.00,   bMoveYFirst := TRUE,  bUseClearance := TRUE)   // Shelf 4
+	// Universal state constants
+	FORKS_IDLE  : INT := 0;
+	FORKS_UP    : INT := 1;
+	FORKS_DOWN  : INT := 2;
+	
+	nAutoState      : INT := 0; 
+	bStartAutoseq   : BOOL := FALSE;
+	bAutoseqDone    : BOOL := FALSE;
+	
+	nStepPointer : INT := 1;
+	nSubPhase    : INT := 0;
+	nTotalSteps  : INT := 14; // Complete simulation mapped sequentially
+	
+	astPath : ARRAY[1..14] OF ST_MotionStep := [
+		// --- SHELF 1 CYCLE ---
+		(fTargetX := 2.8000, fTargetY := 0.0,      nZAction := 1), // 1. Move to aisle line & Raise forks
+		(fTargetX := 2.8000, fTargetY := -0.6247,  nZAction := 0), // 2. Drop Y to shelf 1 height
+		(fTargetX := 9.3720, fTargetY := -0.6247,  nZAction := 2), // 3. Drive deep into shelf & Lower forks
+		(fTargetX := 2.8000, fTargetY := -0.6247,  nZAction := 1), // 4. Retreat to aisle line & Raise forks
+		
+		// --- SHELF 2 CYCLE ---
+		(fTargetX := 2.8000, fTargetY := -9.5381,  nZAction := 0), // 5. Drop Y to shelf 2 height
+		(fTargetX := 9.3720, fTargetY := -9.5381,  nZAction := 2), // 6. Drive deep into shelf & Lower forks
+		(fTargetX := 2.8000, fTargetY := -9.5381,  nZAction := 1), // 7. Retreat to aisle line & Raise forks
+		
+		// --- SHELF 3 CYCLE ---
+		(fTargetX := 2.8000, fTargetY := -18.7514, nZAction := 0), // 8. Drop Y to shelf 3 height
+		(fTargetX := 9.3720, fTargetY := -18.7514, nZAction := 2), // 9. Drive deep into shelf & Lower forks
+		(fTargetX := 2.8000, fTargetY := -18.7514, nZAction := 1), // 10. Retreat to aisle line & Raise forks
+		
+		// --- SHELF 4 CYCLE ---
+		(fTargetX := 2.8000, fTargetY := -34.0000, nZAction := 0), // 11. Drop Y to shelf 4 height
+		(fTargetX := 9.1100, fTargetY := -34.0000, nZAction := 2), // 12. Drive deep into shelf & Lower forks
+		(fTargetX := 2.8000, fTargetY := -34.0000, nZAction := 0), // 13. Retreat to aisle line (Forks stay down)
+		
+		// --- HOME RUN ---
+		(fTargetX := 0.0,    fTargetY := 0.0,      nZAction := 0)  // 14. Return X and Y straight home
 	];
 END_VAR]]></Declaration>
   </GVL>
