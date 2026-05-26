@@ -6,13 +6,10 @@ VAR_GLOBAL
 	Axis1           : AXIS_REF;
 	Axis2           : AXIS_REF;
 	
-	// Default to TRUE on boot
 	bEnableAll      : BOOL := TRUE; 
-	
-	// Explicitly default everything else to FALSE/0
 	bResetAll       : BOOL := FALSE; 
-	bSensor_X       AT %I* : BOOL; // Physical hardware mapping
-	bSensor_Y       AT %I* : BOOL; // Physical hardware mapping
+	bSensor_X       : BOOL; 
+	bSensor_Y       : BOOL; 
 	
 	bStartHoming    : BOOL := FALSE; 
 	bXHomed         : BOOL := FALSE; 
@@ -25,51 +22,34 @@ VAR_GLOBAL
 	bStartAutoseq   : BOOL := FALSE;
 	bAutoseqDone    : BOOL := FALSE;
 	
-	bZlifter        AT %Q* : BOOL;      // Term 3 Channel 2 Pneumatic Solenoid Coil Output
+	bZlifter        AT %Q* : BOOL;      // Forklift Lift Solenoid (TRUE = Forks Raised, FALSE = Forks Lowered)
 	
-	bManualModeActive : BOOL := FALSE;  // Master switch to change to manual mode
+	bManualModeActive : BOOL := FALSE;  
 	
-	bJogForwardX    : BOOL := FALSE;    // X axis manual drive forwards
-	bJogForwardY    : BOOL := FALSE;    // Y axis manual drive forwards
-	
-	bJogBackwardsX  : BOOL := FALSE;    // X axis manual drive backwards
-	bJogBackwardsY  : BOOL := FALSE;    // Y axis manual drive backwards
+	bJogForwardX    : BOOL := FALSE;    
+	bJogForwardY    : BOOL := FALSE;    
+	bJogBackwardsX  : BOOL := FALSE;    
+	bJogBackwardsY  : BOOL := FALSE;    
 	
 	fVelocityX      : LREAL;
 	fVelocityY      : LREAL;
 	
-	// GLOBAL CROSS-POU SAFETY ENVELOPE TRACKING FLAGS
 	bX_Allow_Positive   : BOOL := FALSE;
 	bX_Allow_Negative   : BOOL := FALSE;
 	bY_Allow_Positive   : BOOL := FALSE;
 	bY_Allow_Negative   : BOOL := FALSE;
 
-	// Automated Pointer Tracking Registers
-	nStepPointer     : INT := 1;  // Current active step index
-	nSubPhase        : INT := 0;  // Core data-driven sequencer phase tracking
-	nTotalSteps      : INT := 6;  // Total number of steps in our sequence
+	// Automated Warehouse Tracking
+	nStepPointer     : INT := 1;  // Current Target Shelf (1 to 4)
+	nSubPhase        : INT := 0;  // Current Step in the Forklift Drop-off Sequence
+	nTotalSteps      : INT := 4;  // Total number of shelves to process
 	
-	// =========================================================
-	// MASTER MOTION PATH ARRAY (WITH LIFTER PARAMS INTERLOCKED)
-	// =========================================================
-	astPath : ARRAY[1..6] OF ST_MotionStep := [
-		// Step 1: Location 1 (Rise up -> Travel -> Lower down)
-		(fTargetX := 9.3720,  fTargetY := -0.6247,  bMoveYFirst := TRUE,  bUseClearance := FALSE, bLifterUpBeforeMove := TRUE,  bLifterDownAtTarget := TRUE),
-		
-		// Step 2: Location 2 (Rise up -> Retract X -> Plunge Y -> Drive X -> Lower down)
-		(fTargetX := 9.3720,  fTargetY := -9.5381,  bMoveYFirst := TRUE,  bUseClearance := TRUE,  bLifterUpBeforeMove := TRUE,  bLifterDownAtTarget := TRUE),
-		
-		// Step 3: Location 3 (Rise up -> Retract X -> Plunge Y -> Drive X -> Lower down)
-		(fTargetX := 9.3720,  fTargetY := -18.7514, bMoveYFirst := TRUE,  bUseClearance := TRUE,  bLifterUpBeforeMove := TRUE,  bLifterDownAtTarget := TRUE),
-		
-		// Step 4: Location 4 (Extended Deep Zone - Keep TargetX at your custom 9.1100 value)
-		(fTargetX := 9.1100,  fTargetY := -34.00,   bMoveYFirst := TRUE,  bUseClearance := TRUE,  bLifterUpBeforeMove := TRUE,  bLifterDownAtTarget := TRUE),
-		
-		// Step 5: Retract X back to Home Base first (Keep lifter down/retracted out of the way)
-		(fTargetX := 0.0,     fTargetY := -34.00,   bMoveYFirst := FALSE, bUseClearance := FALSE, bLifterUpBeforeMove := FALSE, bLifterDownAtTarget := FALSE),
-		
-		// Step 6: Bring Y back to Home Base last (Keep lifter safely down)
-		(fTargetX := 0.0,     fTargetY := 0.0,      bMoveYFirst := TRUE,  bUseClearance := FALSE, bLifterUpBeforeMove := FALSE, bLifterDownAtTarget := FALSE)
+	// The 4 Shelf Targets (Forks enter deep into X, at various Y shelf heights)
+	astPath : ARRAY[1..4] OF ST_MotionStep := [
+		(fTargetX := 9.3720,  fTargetY := -0.6247,  bMoveYFirst := TRUE,  bUseClearance := TRUE),  // Shelf 1
+		(fTargetX := 9.3720,  fTargetY := -9.5381,  bMoveYFirst := TRUE,  bUseClearance := TRUE),  // Shelf 2
+		(fTargetX := 9.3720,  fTargetY := -18.7514, bMoveYFirst := TRUE,  bUseClearance := TRUE),  // Shelf 3
+		(fTargetX := 9.1100,  fTargetY := -34.00,   bMoveYFirst := TRUE,  bUseClearance := TRUE)   // Shelf 4
 	];
 END_VAR]]></Declaration>
   </GVL>

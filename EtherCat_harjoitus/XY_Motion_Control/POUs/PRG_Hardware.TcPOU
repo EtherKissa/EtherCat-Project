@@ -171,136 +171,136 @@ END_IF
 
 
 // =========================================================
-// 5. DATA-DRIVEN MOTION ENGINE (AUTOMATED RUN OPERATION)
+// 5. DATA-DRIVEN MOTION ENGINE (FORKLIFT SIMULATION RUN)
 // =========================================================
+// FIXED: Wrapped the case block cleanly inside its required automation execution conditional gates
 IF GVL_Motion.bStartAutoseq AND GVL_Motion.bXHomed AND GVL_Motion.bYHomed AND NOT GVL_Motion.bManualModeActive THEN
 
-	IF GVL_Motion.nStepPointer <= GVL_Motion.nTotalSteps THEN
-		
-		CASE GVL_Motion.nSubPhase OF
+	CASE GVL_Motion.nSubPhase OF
+				
+		0: // --- PHASE 0: RESET AND PREPARE FOR NEXT SHELF ---
+			ExecuteMoveX := FALSE; 
+			ExecuteMoveY := FALSE; 
+			tLifterRiseTimer(IN := FALSE);
+			tLifterLowerTimer(IN := FALSE);
 			
-			0: // --- PHASE 0: COLD EDGE RESET ---
-				ExecuteMoveX := FALSE; 
-				ExecuteMoveY := FALSE; 
-				tLifterRiseTimer(IN := FALSE);
-				tLifterLowerTimer(IN := FALSE);
-				GVL_Motion.nSubPhase := 5; 
-				
-			5: // --- PHASE 5: PRE-TRAVEL SAFETY RISE ---
-				// Cylinder must ALWAYS be UP when travelling to targets 1-4
-				IF GVL_Motion.nStepPointer <= 4 THEN
-					GVL_Motion.bZlifter := TRUE; 
-					tLifterRiseTimer(IN := TRUE, PT := T#1500MS);
-					
-					IF tLifterRiseTimer.Q THEN
-						tLifterRiseTimer(IN := FALSE); 
-						GVL_Motion.nSubPhase := 20; // Safely skip Phase 10 clearance (handled on exit now)
-					END_IF
-				ELSE
-					// Steps 5 and 6 (returning home) can skip the pre-travel rise
-					GVL_Motion.nSubPhase := 20;
-				END_IF
-				
-			20: // --- PHASE 20: FIRST PRIMARY AXIS TRAVERSE ---
-				IF GVL_Motion.astPath[GVL_Motion.nStepPointer].bMoveYFirst THEN
-					TargetX := GVL_Motion.fCurrentX; 
-					TargetY := GVL_Motion.astPath[GVL_Motion.nStepPointer].fTargetY;
-					ExecuteMoveX := FALSE;
-					ExecuteMoveY := TRUE; 
-					
-					IF fbAutoMoveY.Done AND NOT fbAutoMoveY.Busy THEN
-						ExecuteMoveY := FALSE; 
-						GVL_Motion.nSubPhase := 21; 
-					END_IF
-				ELSE
-					TargetX := GVL_Motion.astPath[GVL_Motion.nStepPointer].fTargetX;
-					TargetY := GVL_Motion.fCurrentY; 
-					ExecuteMoveX := TRUE; 
-					ExecuteMoveY := FALSE;
-					
-					IF fbAutoMoveX.Done AND NOT fbAutoMoveX.Busy THEN
-						ExecuteMoveX := FALSE; 
-						GVL_Motion.nSubPhase := 21;
-					END_IF
-				END_IF
+			IF GVL_Motion.nStepPointer <= GVL_Motion.nTotalSteps THEN
+				GVL_Motion.nSubPhase := 5; // Start sequence for the current shelf
+			ELSE
+				GVL_Motion.nSubPhase := 90; // All 4 shelves finished, head safely to home base
+			END_IF
+			
+		5: // --- PHASE 5: PRE-POSITION OVER SHELF ROW (X AXIS FIRST) ---
+			// Move X out to line up with the shelf face at the 2.8 aisle clearance mark
+			TargetX := 2.8000; 
+			TargetY := GVL_Motion.fCurrentY;
+			ExecuteMoveX := TRUE;
+			ExecuteMoveY := FALSE;
+			
+			IF fbAutoMoveX.Done AND NOT fbAutoMoveX.Busy THEN
+				ExecuteMoveX := FALSE;
+				GVL_Motion.nSubPhase := 10;
+			END_IF
 
-			21: // --- PHASE 21: TRAVERSE 1 EDGE BUFFER ---
-				ExecuteMoveX := FALSE; 
-				ExecuteMoveY := FALSE; 
-				GVL_Motion.nSubPhase := 30;
-
-			30: // --- PHASE 30: SECOND AXIS TRAVERSE TO FINAL TARGETS ---
-				TargetX := GVL_Motion.astPath[GVL_Motion.nStepPointer].fTargetX;
-				TargetY := GVL_Motion.astPath[GVL_Motion.nStepPointer].fTargetY;
-				
-				IF GVL_Motion.astPath[GVL_Motion.nStepPointer].bMoveYFirst THEN
-					ExecuteMoveX := TRUE;  
-					ExecuteMoveY := FALSE; 
-					
-					IF fbAutoMoveX.Done AND NOT fbAutoMoveX.Busy THEN
-						ExecuteMoveX := FALSE;
-						GVL_Motion.nSubPhase := 40; // Target reached! Go lower the cylinder.
-					END_IF
-				ELSE
-					ExecuteMoveX := FALSE; 
-					ExecuteMoveY := TRUE;  
-					
-					IF fbAutoMoveY.Done AND NOT fbAutoMoveY.Busy THEN
-						ExecuteMoveY := FALSE;
-						GVL_Motion.nSubPhase := 40; // Target reached! Go lower the cylinder.
-					END_IF
-				END_IF
-				
-			40: // --- PHASE 40: AT-LOCATION LOWER ROUTINE ---
-				// Lower the cylinder down into the active working position
-				GVL_Motion.bZlifter := FALSE; 
-				tLifterLowerTimer(IN := TRUE, PT := T#1500MS);
-				
-				IF tLifterLowerTimer.Q THEN
-					tLifterLowerTimer(IN := FALSE); 
-					
-					// If we are on steps 1-4, we must execute the exit clearance routine
-					IF GVL_Motion.astPath[GVL_Motion.nStepPointer].bUseClearance THEN
-						GVL_Motion.nSubPhase := 45; 
-					ELSE
-						// Steps 5-6 do not use clearance, advance pointer immediately
-						GVL_Motion.nSubPhase := 0;      
-						GVL_Motion.nStepPointer := GVL_Motion.nStepPointer + 1; 
-					END_IF
-				END_IF
-
-			45: // --- PHASE 45: RETRACT X TO 2.8 AREA (CYLINDER STAYS LOWERED) ---
-				TargetX := 2.8000;
-				TargetY := GVL_Motion.fCurrentY; // Maintain current Y depth
-				ExecuteMoveX := TRUE;
+		10: // --- PHASE 10: ALIGN VERTICAL HEIGHT (Y AXIS SECOND) ---
+			// Now that X is safely at the aisle line, move Y to the target shelf height
+			TargetX := GVL_Motion.fCurrentX;
+			TargetY := GVL_Motion.astPath[GVL_Motion.nStepPointer].fTargetY;
+			ExecuteMoveX := FALSE;
+			ExecuteMoveY := TRUE;
+			
+			IF fbAutoMoveY.Done AND NOT fbAutoMoveY.Busy THEN
 				ExecuteMoveY := FALSE;
-				
-				IF fbAutoMoveX.Done AND NOT fbAutoMoveX.Busy THEN
-					ExecuteMoveX := FALSE;
-					GVL_Motion.nSubPhase := 48; // Arrived at 2.8 clearance zone! Now lift.
-				END_IF
+				GVL_Motion.nSubPhase := 15;
+			END_IF
 
-			48: // --- PHASE 48: POST-CLEARANCE LIFT ROUTINE ---
-				// We are safely back at 2.8, now lift the cylinder before updating the step pointer
-				GVL_Motion.bZlifter := TRUE;
-				tLifterRiseTimer(IN := TRUE, PT := T#1500MS);
+		15: // --- PHASE 15: RAISE FORKLIFT FOR ENTRY CLEARANCE ---
+			// Raise forks to safely hold the pallet above the shelf beam
+			GVL_Motion.bZlifter := TRUE; 
+			tLifterRiseTimer(IN := TRUE, PT := T#1500MS);
+			
+			IF tLifterRiseTimer.Q THEN
+				tLifterRiseTimer(IN := FALSE); 
+				GVL_Motion.nSubPhase := 20; // Forks are proven UP
+			END_IF
+
+		20: // --- PHASE 20: DRIVE FORKS INTO SHELF (X EXTENSION) ---
+			// Push the forks deep into the slot to deposit the pallet
+			TargetX := GVL_Motion.astPath[GVL_Motion.nStepPointer].fTargetX;
+			TargetY := GVL_Motion.fCurrentY;
+			ExecuteMoveX := TRUE;
+			ExecuteMoveY := FALSE;
+			
+			IF fbAutoMoveX.Done AND NOT fbAutoMoveX.Busy THEN
+				ExecuteMoveX := FALSE;
+				GVL_Motion.nSubPhase := 30;
+			END_IF
+
+		30: // --- PHASE 30: LOWER FORKLIFT TO PLACE PALLET ---
+			// Lower forks down to set the pallet onto the shelf rails
+			GVL_Motion.bZlifter := FALSE; 
+			tLifterLowerTimer(IN := TRUE, PT := T#1500MS);
+			
+			IF tLifterLowerTimer.Q THEN
+				tLifterLowerTimer(IN := FALSE); 
+				GVL_Motion.nSubPhase := 40; // Forks are proven DOWN
+			END_IF
+
+		40: // --- PHASE 40: RETREAT TO SAFE CLEARANCE DISTANCE ---
+			// Safely extract the empty forks straight back out to the 2.8 aisle line
+			TargetX := 2.8000;
+			TargetY := GVL_Motion.fCurrentY; // Lock Y completely still
+			ExecuteMoveX := TRUE;
+			ExecuteMoveY := FALSE;
+			
+			IF fbAutoMoveX.Done AND NOT fbAutoMoveX.Busy THEN
+				ExecuteMoveX := FALSE;
+				GVL_Motion.nSubPhase := 45;
+			END_IF
+
+		45: // --- PHASE 45: POST-RETREAT FORK LIFT ROUTINE ---
+			// Now that we are back at 2.8, raise the forklift back to travelling height
+			GVL_Motion.bZlifter := TRUE;
+			tLifterRiseTimer(IN := TRUE, PT := T#1500MS);
+			
+			IF tLifterRiseTimer.Q THEN
+				tLifterRiseTimer(IN := FALSE);
+				// This shelf is 100% complete. Advance pointer to next shelf and restart loop
+				GVL_Motion.nStepPointer := GVL_Motion.nStepPointer + 1;
+				GVL_Motion.nSubPhase := 0; 
+			END_IF
+
+		90: // --- PHASE 90: RETRACT Y HEIGHT FIRST FOR HOME RUN SAFETY ---
+			// FIXED: We pull Y back up to 0.0 while still safe at the 2.8 aisle line.
+			// This prevents hitting pocket software limits when coming back from deep shelves.
+			TargetX := GVL_Motion.fCurrentX;
+			TargetY := 0.0;
+			ExecuteMoveX := FALSE;
+			ExecuteMoveY := TRUE;
+			
+			IF fbAutoMoveY.Done AND NOT fbAutoMoveY.Busy THEN
+				ExecuteMoveY := FALSE;
+				GVL_Motion.nSubPhase := 95;
+			END_IF
+
+		95: // --- PHASE 95: RETURN X TO HOME BASE LAST ---
+			TargetX := 0.0;
+			TargetY := GVL_Motion.fCurrentY;
+			ExecuteMoveX := TRUE;
+			ExecuteMoveY := FALSE;
+			
+			IF fbAutoMoveX.Done AND NOT fbAutoMoveX.Busy THEN
+				ExecuteMoveX := FALSE;
+				GVL_Motion.bZlifter := FALSE; // Drop forks to rest at home base
 				
-				IF tLifterRiseTimer.Q THEN
-					tLifterRiseTimer(IN := FALSE);
-					
-					// Sequence house keeping: increment pointer and cycle back to Phase 0
-					GVL_Motion.nSubPhase := 0;
-					GVL_Motion.nStepPointer := GVL_Motion.nStepPointer + 1;
-				END_IF
-				
-		END_CASE
-		
-	ELSE
-		GVL_Motion.bAutoseqDone := TRUE;
-		GVL_Motion.bStartAutoseq := FALSE;
-		GVL_Motion.nStepPointer := 1;
-		GVL_Motion.nSubPhase := 0;
-	END_IF
+				// Entire warehouse simulation run complete!
+				GVL_Motion.bAutoseqDone := TRUE;
+				GVL_Motion.bStartAutoseq := FALSE;
+				GVL_Motion.nStepPointer := 1;
+				GVL_Motion.nSubPhase := 0;
+			END_IF
+			
+	END_CASE
 
 ELSE
 	// Global Safety Reset Anchor 
@@ -310,12 +310,10 @@ ELSE
 	tLifterLowerTimer(IN := FALSE);
 END_IF
 
+
 // =========================================================
 // CENTRAL MOTION ENGINE HOOKS (INTERLOCKED WITH MANUAL BYPASS)
 // =========================================================
-// CRITICAL FIX: If manual mode is active, we bypass the absolute auto-blocks completely
-// by passing FALSE to Execute. This frees up the NC reference channel so your 
-// separate manual POUs can jog the axes without interference!
 fbAutoMoveX(
 	Axis     := GVL_Motion.Axis1,
 	Execute  := ExecuteMoveX AND NOT GVL_Motion.bManualModeActive, 
@@ -329,10 +327,7 @@ fbAutoMoveY(
 	Velocity := 10.0);]]></ST>
     </Implementation>
     <LineIds Name="PRG_Hardware">
-      <LineId Id="2945" Count="142" />
-      <LineId Id="3257" Count="115" />
-      <LineId Id="3195" Count="15" />
-      <LineId Id="3212" Count="16" />
+      <LineId Id="3526" Count="289" />
       <LineId Id="770" Count="0" />
     </LineIds>
   </POU>
