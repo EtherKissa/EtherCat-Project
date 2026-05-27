@@ -3,16 +3,15 @@
   <POU Name="MAIN" Id="{c544dac8-e7b8-483c-93d1-a46857f04ac3}" SpecialFunc="None">
     <Declaration><![CDATA[PROGRAM MAIN
 VAR
-    // Clean slate - no variables needed here for now!
+	// Create the master instance of your clean object block
+	ForkliftControl : FB_XYZ_Movement;
 END_VAR]]></Declaration>
     <Implementation>
-      <ST><![CDATA[// Unconditionally call the background power and homing hardware engine
-PRG_Hardware();
-PRG_Manual_Drive();]]></ST>
+      <ST><![CDATA[// Execute the entire forklift ASRS system cleanly in one line
+ForkliftControl(Axis1 := GVL_Motion.Axis1, Axis2 := GVL_Motion.Axis2);]]></ST>
     </Implementation>
     <LineIds Name="MAIN">
-      <LineId Id="598" Count="0" />
-      <LineId Id="519" Count="0" />
+      <LineId Id="621" Count="0" />
       <LineId Id="602" Count="0" />
     </LineIds>
   </POU>
