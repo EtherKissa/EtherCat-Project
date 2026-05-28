@@ -1,13 +1,13 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
   <POU Name="MAIN" Id="{c544dac8-e7b8-483c-93d1-a46857f04ac3}" SpecialFunc="None">
-    <Declaration><![CDATA[PROGRAM MAIN
+    <Declaration><![CDATA[// Author RL
+PROGRAM MAIN
 VAR
-	// Create the master instance of your clean object block
 	ForkliftControl : FB_XYZ_Movement;
 END_VAR]]></Declaration>
     <Implementation>
-      <ST><![CDATA[// Execute the entire forklift ASRS system cleanly in one line
+      <ST><![CDATA[// Execute the entire system
 ForkliftControl(Axis1 := GVL_Motion.Axis1, Axis2 := GVL_Motion.Axis2);]]></ST>
     </Implementation>
     <LineIds Name="MAIN">

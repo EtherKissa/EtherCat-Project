@@ -1,25 +1,26 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
   <POU Name="FB_XYZ_Movement" Id="{c3e8fe8c-fd5a-43cc-a474-ef87a85d6250}" SpecialFunc="None">
-    <Declaration><![CDATA[FUNCTION_BLOCK FB_XYZ_Movement
+    <Declaration><![CDATA[// Author RL
+FUNCTION_BLOCK FB_XYZ_Movement
 VAR_INPUT
 END_VAR
 VAR_OUTPUT
 END_VAR
 VAR_IN_OUT
-	// Link the shared physical axis records directly into the FB instance memory
-	Axis1                : AXIS_REF;
-	Axis2                : AXIS_REF;
+	// Axis references
+	Axis1                : AXIS_REF; // X
+	Axis2                : AXIS_REF; // Y
 END_VAR
 VAR
-	// Clean targeting registers used strictly by the active sequencer
+	// Targeting registers used by sequencer
 	ExecuteMoveX         : BOOL; 
 	ExecuteMoveY         : BOOL; 
 	TargetX              : LREAL;
 	TargetY              : LREAL;
 	bSequenceResetPulse  : BOOL;
 	
-	// Real Physical Motion Instance Calls
+	// Physical motion and resets
 	fbPower1             : MC_Power;
 	fbPower2             : MC_Power;
 	fbReset1             : MC_Reset;
@@ -27,7 +28,7 @@ VAR
 	fbAutoMoveX          : MC_MoveAbsolute;
 	fbAutoMoveY          : MC_MoveAbsolute;
 	
-	// Homing Sequences
+	// Homing sequence
 	fbDriveToSensorX     : MC_MoveVelocity;
 	fbDriveToSensorY     : MC_MoveVelocity;
 	fbStopX              : MC_Stop;
@@ -35,27 +36,22 @@ VAR
 	fbLockZeroX          : MC_SetPosition;
 	fbLockZeroY          : MC_SetPosition;
 	
-	// Manual Control Instances
+	// Manual control
 	fbJogX               : MC_Jog;
 	fbJogY               : MC_Jog;
 	
-	// Universal Timers
+	// Timer for pneumatic lifter delay
 	tPneumaticDelay      : TON;
 END_VAR
 ]]></Declaration>
     <Implementation>
-      <ST><![CDATA[// =================================================================
-// 1. DYNAMIC ENVIRONMENT SAFETY SCAN
-// =================================================================
-// Always execute the safety method first to evaluate limits and track 
-// real-time axis coordinates before executing motion blocks.
+      <ST><![CDATA[// Author RL
+// ----- 1. Safety first :)
+// Execute the safety method first to evaluate limits and track real-time axis coordinates before executing motion blocks.
 THIS^.M_UpdateSafety();
 
-
-// =================================================================
-// 2. CENTRALIZED HARDWARE DRIVE INTERLOCKS (MC_Power / MC_Reset)
-// =================================================================
-// Axis 1 Power and Directional Interlocks
+// ----- 2. Axis 1 (X) and Axis 2 (Y) power blocks
+// Axis 1 power and directional enables (To ensure safe operation within set coordinates)
 fbPower1(
     Axis            := Axis1, 
     Enable          := GVL_Motion.bEnableAll, 
@@ -63,7 +59,7 @@ fbPower1(
     Enable_Negative := GVL_Motion.bEnableAll AND GVL_Motion.bX_Allow_Negative
 );
 
-// Axis 2 Power and Directional Interlocks
+// Axis 2 power and directional enables (To ensure safe operation within set coordinates)
 fbPower2(
     Axis            := Axis2, 
     Enable          := GVL_Motion.bEnableAll, 
@@ -71,15 +67,11 @@ fbPower2(
     Enable_Negative := GVL_Motion.bEnableAll AND GVL_Motion.bY_Allow_Negative
 );
 
-// Clear faults in the NC kernel channels when the global UI reset button is tapped
+// Clear errors within the NC kernel with the global reset button
 fbReset1(Axis := Axis1, Execute := GVL_Motion.bResetAll);
 fbReset2(Axis := Axis2, Execute := GVL_Motion.bResetAll);
 
-
-// =================================================================
-// 3. OPERATIONAL MODE CONDITIONAL ROUTING
-// =================================================================
-// Dynamically isolate manual operations from automated processes
+// ----- 3. Seperated modes for automatic, manual and homing 
 IF GVL_Motion.bManualModeActive THEN
     THIS^.M_ManualControl();
 ELSE
@@ -87,16 +79,13 @@ ELSE
     THIS^.M_AutoSequence();
 END_IF
 
-
-// =================================================================
-// 4. AUTOMATED PROFILE OUTPUT HOOKS TO THE NC KERNEL
-// =================================================================
+// ----- 4. Autosequence movement blocks, edit the velocity if you want slower or faster movement during autoseq
 // Automated Move Absolute Block for the X-Axis
 fbAutoMoveX(
     Axis     := Axis1, 
     Execute  := ExecuteMoveX AND NOT GVL_Motion.bManualModeActive AND NOT bSequenceResetPulse, 
     Position := TargetX, 
-    Velocity := 13.0
+    Velocity := 10.0
 );
 
 // Automated Move Absolute Block for the Y-Axis
@@ -108,63 +97,67 @@ fbAutoMoveY(
 );]]></ST>
     </Implementation>
     <Method Name="M_AutoSequence" Id="{afa51490-1005-4446-972e-b37cd2473a1c}">
-      <Declaration><![CDATA[METHOD PRIVATE M_AutoSequence
+      <Declaration><![CDATA[// Author RL
+METHOD PRIVATE M_AutoSequence
 VAR_INPUT
 END_VAR
 ]]></Declaration>
       <Implementation>
-        <ST><![CDATA[IF GVL_Motion.bStartAutoseq AND GVL_Motion.bXHomed AND GVL_Motion.bYHomed THEN
+        <ST><![CDATA[// Author RL
+IF GVL_Motion.bStartAutoseq AND GVL_Motion.bXHomed AND GVL_Motion.bYHomed THEN
     bSequenceResetPulse := FALSE;
 
     IF GVL_Motion.nStepPointer <= GVL_Motion.nTotalSteps THEN
         CASE GVL_Motion.nSubPhase OF
-            0: // STATE 0: ADAPTIVE PNEUMATIC LIFT EVALUATION
+            0: // State 0: Pneumatic lift evaluation
                 tPneumaticDelay(IN := FALSE); 
                 
-                // If we are in Retrieval mode, we invert the target Z action commands!
+                // Invert the Z action commands (penumatic lifter) if in retrieval mode
                 IF NOT GVL_Motion.bRetrievalMode THEN
-                    // --- STANDARD OPERATION: PUT AWAY PALLETS ---
+                    // This operation puts away the pallets
                     IF GVL_Motion.astPath[GVL_Motion.nStepPointer].nZAction = GVL_Motion.FORKS_UP THEN
+						// Forks up
                         GVL_Motion.bZlifter := FALSE; GVL_Motion.nSubPhase := 5; 
                     ELSIF GVL_Motion.astPath[GVL_Motion.nStepPointer].nZAction = GVL_Motion.FORKS_DOWN THEN
+						// Forks down
                         GVL_Motion.bZlifter := TRUE; GVL_Motion.nSubPhase := 5; 
                     ELSE
                         GVL_Motion.nSubPhase := 10; 
                     END_IF
                 ELSE
-                    // --- OPPOSITE OPERATION: TAKE AWAY PALLETS (RETRIEVAL) ---
+                    // This operation takes away the pallets
                     IF GVL_Motion.astPath[GVL_Motion.nStepPointer].nZAction = GVL_Motion.FORKS_UP THEN
-                        // Inverted: Approach the pallet with the forks DOWN
+                        // Forks down
                         GVL_Motion.bZlifter := TRUE; GVL_Motion.nSubPhase := 5; 
                     ELSIF GVL_Motion.astPath[GVL_Motion.nStepPointer].nZAction = GVL_Motion.FORKS_DOWN THEN
-                        // Inverted: Lift the forks UP to pick the pallet off the shelf
+                        // Forks up
                         GVL_Motion.bZlifter := FALSE; GVL_Motion.nSubPhase := 5; 
                     ELSE
                         GVL_Motion.nSubPhase := 10; 
                     END_IF
                 END_IF
                 
-            5: // STATE 5: PNEUMATIC SETTLE DWELL
+            5: // State 5: Delay for controlled operation of Z lifter
                 tPneumaticDelay(IN := TRUE, PT := T#1500MS);
                 IF tPneumaticDelay.Q THEN 
                     tPneumaticDelay(IN := FALSE); 
                     GVL_Motion.nSubPhase := 10; 
                 END_IF
                 
-            10: // STATE 10: NON-COORDINATED FLIGHT ROUTING (ONE AXIS AT A TIME)
+            10: // State 10: Movement one axis at a time so we don't crash in to the shelves with diagonal movement
                 IF GVL_Motion.nStepPointer = GVL_Motion.nTotalSteps THEN
                     ExecuteMoveX := FALSE; 
                     ExecuteMoveY := FALSE; 
                     GVL_Motion.nSubPhase := 80; 
                 
-                // PRIORITY 1: Move Y ONLY while keeping X locked
+                // Important to move Y first, keeping X locked
                 ELSIF ABS(GVL_Motion.fCurrentY - GVL_Motion.astPath[GVL_Motion.nStepPointer].fTargetY) > 0.05 THEN
                     TargetX := GVL_Motion.fCurrentX; 
                     TargetY := GVL_Motion.astPath[GVL_Motion.nStepPointer].fTargetY;
                     ExecuteMoveX := FALSE; 
                     ExecuteMoveY := TRUE;
                     
-                // PRIORITY 2: Once Y settles, move X ONLY
+                // Move X after Y is finished moving
                 ELSIF NOT fbAutoMoveY.Busy THEN
                     TargetX := GVL_Motion.astPath[GVL_Motion.nStepPointer].fTargetX; 
                     TargetY := GVL_Motion.fCurrentY;
@@ -175,7 +168,7 @@ END_VAR
                     ExecuteMoveY := FALSE;
                 END_IF
                 
-                // Transition check: Advance step
+                // Check that we are done with movements
                 IF GVL_Motion.nSubPhase = 10 
                     AND (NOT ExecuteMoveX OR (fbAutoMoveX.Done AND NOT fbAutoMoveX.Busy)) 
                     AND (NOT ExecuteMoveY OR (fbAutoMoveY.Done AND NOT fbAutoMoveY.Busy)) 
@@ -187,7 +180,7 @@ END_VAR
                     GVL_Motion.nSubPhase := 0; 
                 END_IF
 
-            80: // STATE 80: STAGE 1 RETRACT - X AXIS ONLY OUT OF SLOT
+            80: // State 80: Move X out
                 TargetX := 2.8000; 
                 TargetY := GVL_Motion.fCurrentY; 
                 ExecuteMoveX := TRUE; 
@@ -198,7 +191,7 @@ END_VAR
                     GVL_Motion.nSubPhase := 85; 
                 END_IF
 
-            85: // STATE 85: STAGE 2 RETRACT - CHOP X TO HOME ORIGIN FIRST
+            85: // State 85: Move X to home first to avoid destruction
                 TargetX := 0.0; 
                 TargetY := GVL_Motion.fCurrentY; 
                 ExecuteMoveX := TRUE; 
@@ -209,7 +202,7 @@ END_VAR
                     GVL_Motion.nSubPhase := 88; 
                 END_IF
 
-            88: // STATE 88: FINAL RETRACT - DROP Y BACK TO FLOOR LEVEL TO PARK
+            88: // State 88: Move Y to home
                 TargetX := GVL_Motion.fCurrentX; 
                 TargetY := 0.0; 
                 ExecuteMoveX := FALSE; 
@@ -218,9 +211,6 @@ END_VAR
                 IF fbAutoMoveY.Done AND NOT fbAutoMoveY.Busy AND NOT fbAutoMoveX.Busy THEN
                     ExecuteMoveY := FALSE; 
                     
-                    // Maintain adaptive finish position for the forks
-                    // Deposit mode finishes empty (Forks Raised/FALSE)
-                    // Retrieval mode finishes carrying a pallet (Forks Lowered/TRUE or customized)
                     GVL_Motion.bZlifter := NOT GVL_Motion.bRetrievalMode; 
                     
                     GVL_Motion.bAutoseqDone := TRUE;
@@ -249,12 +239,14 @@ END_IF]]></ST>
       </Implementation>
     </Method>
     <Method Name="M_Homing" Id="{12b2d37b-9e60-4087-b38d-da7b8a3e62a3}">
-      <Declaration><![CDATA[METHOD PRIVATE M_Homing
+      <Declaration><![CDATA[// Author RL
+METHOD PRIVATE M_Homing
 VAR_INPUT
 END_VAR
 ]]></Declaration>
       <Implementation>
-        <ST><![CDATA[// 1. X-AXIS CALIBRATION ROUTINE
+        <ST><![CDATA[// Author RL
+// 1. Axis 1 (X) Calibration to home
 fbDriveToSensorX(
     Axis      := Axis1, 
     Execute   := GVL_Motion.bStartHoming AND NOT GVL_Motion.bSensor_X AND NOT GVL_Motion.bXHomed AND NOT fbStopX.Execute, 
@@ -274,7 +266,7 @@ fbLockZeroX(
     Mode     := FALSE
 );
 
-// 2. Y-AXIS CALIBRATION ROUTINE
+// 2. Axis 2 (Y) Calibration to home
 fbDriveToSensorY(
     Axis      := Axis2, 
     Execute   := GVL_Motion.bStartHoming AND NOT GVL_Motion.bSensor_Y AND NOT GVL_Motion.bYHomed AND NOT fbStopY.Execute, 
@@ -294,7 +286,7 @@ fbLockZeroY(
     Mode     := FALSE
 );
 
-// 3. HANDSHAKE UPDATE LABELS
+// 3. Information if homing succesful
 IF fbLockZeroX.Done THEN 
     GVL_Motion.bXHomed := TRUE; 
 END_IF
@@ -307,7 +299,6 @@ IF GVL_Motion.bXHomed AND GVL_Motion.bYHomed THEN
     GVL_Motion.bStartHoming := FALSE; 
 END_IF
 
-// 4. CLEANUP EDGE TRIGGERS ON RETRACT
 IF NOT GVL_Motion.bStartHoming THEN
     fbStopX(Axis := Axis1, Execute := FALSE); 
     fbStopY(Axis := Axis2, Execute := FALSE);
@@ -317,7 +308,8 @@ END_IF]]></ST>
       </Implementation>
     </Method>
     <Method Name="M_ManualControl" Id="{e7b4efcd-fc98-4e65-8010-2258e9402518}">
-      <Declaration><![CDATA[METHOD PRIVATE M_ManualControl
+      <Declaration><![CDATA[// Author RL
+METHOD PRIVATE M_ManualControl
 VAR
 	bSafeJogFX : BOOL;
 	bSafeJogBX : BOOL;
@@ -325,13 +317,14 @@ VAR
 	bSafeJogBY : BOOL;
 END_VAR]]></Declaration>
       <Implementation>
-        <ST><![CDATA[// 1. Interlock raw UI button presses with real-time safety boundary gates
+        <ST><![CDATA[// Author RL
+// 1. Safety integrated to manual jogging commands
 bSafeJogFX := GVL_Motion.bJogForwardX AND GVL_Motion.bX_Allow_Positive;
 bSafeJogBX := GVL_Motion.bJogBackwardsX AND GVL_Motion.bX_Allow_Negative;
 bSafeJogFY := GVL_Motion.bJogForwardY AND GVL_Motion.bY_Allow_Positive;
 bSafeJogBY := GVL_Motion.bJogBackwardsY AND GVL_Motion.bY_Allow_Negative;
 
-// 2. Feed the safe outputs directly into the MC_Jog instances
+// 2. Manual drive settings, velocity changeable
 fbJogX(
 	Axis         := Axis1, 
 	JogForward   := bSafeJogFX, 
@@ -350,24 +343,24 @@ fbJogY(
       </Implementation>
     </Method>
     <Method Name="M_UpdateSafety" Id="{597cea4c-363a-414d-b6d6-d4db2aedbbb3}">
-      <Declaration><![CDATA[METHOD PRIVATE M_UpdateSafety
+      <Declaration><![CDATA[// Author RL
+METHOD PRIVATE M_UpdateSafety
 VAR_INPUT
 END_VAR
 ]]></Declaration>
       <Implementation>
-        <ST><![CDATA[// 1. Refresh Live System Positions directly from the physical input references
+        <ST><![CDATA[// 1. System position, read from axis
 GVL_Motion.fCurrentX := Axis1.NcToPlc.ActPos;
 GVL_Motion.fCurrentY := Axis2.NcToPlc.ActPos; 
 
-// 2. Evaluate Dynamic Clearance Envelopes
 IF GVL_Motion.bStartHoming THEN
-    // Open all gates wide during homing calibration routines
+    // During homing all movement is allowed
     GVL_Motion.bX_Allow_Negative := TRUE; 
     GVL_Motion.bX_Allow_Positive := TRUE;
     GVL_Motion.bY_Allow_Negative := TRUE; 
     GVL_Motion.bY_Allow_Positive := TRUE;
 ELSE
-    // Standard operational space limits
+    // THESE ARE ACTUAL SAFETY LIMITS TO AVOID CRASHING IN TO PHYSICAL OBSTACLES, PLEASE DON'T EDIT
     GVL_Motion.bX_Allow_Negative := (GVL_Motion.fCurrentX > -0.1);
     
     GVL_Motion.bX_Allow_Positive := SEL(GVL_Motion.fCurrentY <= -30.0, 
@@ -383,23 +376,39 @@ END_IF]]></ST>
       </Implementation>
     </Method>
     <LineIds Name="FB_XYZ_Movement">
-      <LineId Id="87" Count="60" />
+      <LineId Id="189" Count="1" />
+      <LineId Id="90" Count="0" />
+      <LineId Id="92" Count="1" />
+      <LineId Id="97" Count="20" />
+      <LineId Id="121" Count="0" />
+      <LineId Id="123" Count="6" />
+      <LineId Id="133" Count="14" />
       <LineId Id="9" Count="0" />
     </LineIds>
     <LineIds Name="FB_XYZ_Movement.M_AutoSequence">
-      <LineId Id="364" Count="131" />
+      <LineId Id="500" Count="0" />
+      <LineId Id="364" Count="11" />
+      <LineId Id="501" Count="0" />
+      <LineId Id="376" Count="1" />
+      <LineId Id="502" Count="0" />
+      <LineId Id="378" Count="90" />
+      <LineId Id="472" Count="23" />
       <LineId Id="5" Count="0" />
     </LineIds>
     <LineIds Name="FB_XYZ_Movement.M_Homing">
-      <LineId Id="6" Count="58" />
+      <LineId Id="69" Count="0" />
+      <LineId Id="6" Count="51" />
+      <LineId Id="59" Count="5" />
       <LineId Id="5" Count="0" />
     </LineIds>
     <LineIds Name="FB_XYZ_Movement.M_ManualControl">
+      <LineId Id="40" Count="0" />
       <LineId Id="12" Count="20" />
       <LineId Id="5" Count="0" />
     </LineIds>
     <LineIds Name="FB_XYZ_Movement.M_UpdateSafety">
-      <LineId Id="6" Count="23" />
+      <LineId Id="6" Count="2" />
+      <LineId Id="10" Count="19" />
       <LineId Id="5" Count="0" />
     </LineIds>
   </POU>

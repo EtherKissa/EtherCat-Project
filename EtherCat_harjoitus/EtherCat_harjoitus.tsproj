@@ -1457,7 +1457,8 @@ External Setpoint Generation:
 					<Name>NC-Task 1 SVB</Name>
 				</SvbTask>
 				<Axis Id="1" CreateSymbols="true" AxisType="1">
-					<Name>Axis 1</Name>
+					<Name>Axis 1 (X)</Name>
+					<Comment><![CDATA[This is the X axis]]></Comment>
 					<AxisPara>
 						<Velo RefSearch="3" SlowManual="5" FastManual="50"/>
 						<OtherSettings AllowMotionCmdToSlave="true"/>
@@ -1599,7 +1600,8 @@ External Setpoint Generation:
 					</Vars>
 				</Axis>
 				<Axis Id="2" CreateSymbols="true" AxisType="1">
-					<Name>Axis 2</Name>
+					<Name>Axis 2 (Y)</Name>
+					<Comment><![CDATA[This is the Y axis]]></Comment>
 					<AxisPara>
 						<Velo RefSearch="3" SlowManual="10" FastManual="50"/>
 						<OtherSettings AllowMotionCmdToSlave="true"/>
@@ -1744,11 +1746,16 @@ External Setpoint Generation:
 		</Motion>
 		<Plc>
 			<Project GUID="{02AB9690-0BAD-46EA-9038-AEAD0D446227}" Name="XY_Motion_Control" PrjFilePath="XY_Motion_Control\XY_Motion_Control.plcproj" TmcFilePath="XY_Motion_Control\XY_Motion_Control.tmc" ReloadTmc="true" AmsPort="851" FileArchiveSettings="#x000e" SymbolicMapping="true">
-				<Instance Id="#x08502000" TcSmClass="TComPlcObjDef" KeepUnrestoredLinks="1" TmcPath="XY_Motion_Control\XY_Motion_Control.tmc" TmcHash="{B4DCB52A-DDA0-1B51-932D-87194DDD924A}">
+				<Instance Id="#x08502000" TcSmClass="TComPlcObjDef" KeepUnrestoredLinks="1" TmcPath="XY_Motion_Control\XY_Motion_Control.tmc" TmcHash="{3038451E-7FBA-BF66-85DC-8F825F456FB3}">
 					<Name>Motion_Control</Name>
 					<CLSID ClassFactory="TcPlc30">{08500001-0000-0000-F000-000000000064}</CLSID>
 					<Vars VarGrpType="1">
 						<Name>PlcTask Inputs</Name>
+						<Var>
+							<Name>GVL_Motion.bSensor_X</Name>
+							<Comment><![CDATA[ Homing inputs and status check after homing]]></Comment>
+							<Type>BOOL</Type>
+						</Var>
 						<Var>
 							<Name>GVL_Motion.Axis1.NcToPlc</Name>
 							<Type GUID="{25521FAA-EA5F-4C7F-8864-BBCCDACD2E98}" Namespace="MC">NCTOPLC_AXIS_REF</Type>
@@ -1756,11 +1763,6 @@ External Setpoint Generation:
 						<Var>
 							<Name>GVL_Motion.Axis2.NcToPlc</Name>
 							<Type GUID="{25521FAA-EA5F-4C7F-8864-BBCCDACD2E98}" Namespace="MC">NCTOPLC_AXIS_REF</Type>
-						</Var>
-						<Var>
-							<Name>GVL_Motion.bSensor_X</Name>
-							<Comment><![CDATA[ Homing inputs & status]]></Comment>
-							<Type>BOOL</Type>
 						</Var>
 						<Var>
 							<Name>GVL_Motion.bSensor_Y</Name>
@@ -1779,7 +1781,7 @@ External Setpoint Generation:
 						</Var>
 						<Var>
 							<Name>GVL_Motion.bZlifter</Name>
-							<Comment><![CDATA[ Solenoid (FALSE = Raised, TRUE = Lowered)]]></Comment>
+							<Comment><![CDATA[ FALSE = Raised, TRUE = Lowered)]]></Comment>
 							<Type>BOOL</Type>
 						</Var>
 					</Vars>
@@ -2673,7 +2675,7 @@ External Setpoint Generation:
 		<MappingInfo Identifier="{00000000-0040-0304-7000-040340000403}" Id="#x02030010"/>
 		<MappingInfo Identifier="{00000000-0050-0304-7000-040351000403}" Id="#x02030020"/>
 		<MappingInfo Identifier="{05000010-2001-0850-7000-040300205008}" Id="#x02030040" Watchdog="14000000040000000400000004000000"/>
-		<OwnerA Name="TINC^NC-Task 1 SAF^Axes^Axis 1">
+		<OwnerA Name="TINC^NC-Task 1 SAF^Axes^Axis 1 (X)">
 			<OwnerB Name="TIID^Device 5 (EtherCAT)^Drive 5 (R88D-KN01H-ECT)">
 				<Link VarA="Drive^Inputs^In^nDataIn1" VarB="258th transmit PDO Mapping^Following error actual value"/>
 				<Link VarA="Drive^Inputs^In^nDataIn3[0]" VarB="258th transmit PDO Mapping^Torque actual value"/>
@@ -2697,7 +2699,7 @@ External Setpoint Generation:
 				<Link VarA="Enc^Outputs^Out^nCtrl6" VarB="258th receive PDO Mapping^Touch probe function" Size="8" OffsB="8"/>
 			</OwnerB>
 		</OwnerA>
-		<OwnerA Name="TINC^NC-Task 1 SAF^Axes^Axis 2">
+		<OwnerA Name="TINC^NC-Task 1 SAF^Axes^Axis 2 (Y)">
 			<OwnerB Name="TIID^Device 5 (EtherCAT)^Drive 6 (R88D-KN01H-ECT)">
 				<Link VarA="Drive^Inputs^In^nDataIn1" VarB="258th transmit PDO Mapping^Following error actual value"/>
 				<Link VarA="Drive^Inputs^In^nDataIn3[0]" VarB="258th transmit PDO Mapping^Torque actual value"/>
@@ -2729,11 +2731,11 @@ External Setpoint Generation:
 			<OwnerB Name="TIID^Device 2 (EtherCAT)^Term 1 (EK1200)^Term 3 (EL2008)">
 				<Link VarA="PlcTask Outputs^GVL_Motion.bZlifter" VarB="Channel 2^Output"/>
 			</OwnerB>
-			<OwnerB Name="TINC^NC-Task 1 SAF^Axes^Axis 1">
+			<OwnerB Name="TINC^NC-Task 1 SAF^Axes^Axis 1 (X)">
 				<Link VarA="PlcTask Inputs^GVL_Motion.Axis1.NcToPlc" VarB="Outputs^ToPlc"/>
 				<Link VarA="PlcTask Outputs^GVL_Motion.Axis1.PlcToNc" VarB="Inputs^FromPlc"/>
 			</OwnerB>
-			<OwnerB Name="TINC^NC-Task 1 SAF^Axes^Axis 2">
+			<OwnerB Name="TINC^NC-Task 1 SAF^Axes^Axis 2 (Y)">
 				<Link VarA="PlcTask Inputs^GVL_Motion.Axis2.NcToPlc" VarB="Outputs^ToPlc"/>
 				<Link VarA="PlcTask Outputs^GVL_Motion.Axis2.PlcToNc" VarB="Inputs^FromPlc"/>
 			</OwnerB>

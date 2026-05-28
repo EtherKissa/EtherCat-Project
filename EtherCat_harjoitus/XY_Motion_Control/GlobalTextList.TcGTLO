@@ -16,8 +16,18 @@
               <l n="LanguageTexts" t="ArrayList" />
             </o>
             <o>
+              <v n="TextID">"401"</v>
+              <v n="TextDefault">"Allow X Negative"</v>
+              <l n="LanguageTexts" t="ArrayList" />
+            </o>
+            <o>
               <v n="TextID">"833"</v>
               <v n="TextDefault">"Allow X positive"</v>
+              <l n="LanguageTexts" t="ArrayList" />
+            </o>
+            <o>
+              <v n="TextID">"178"</v>
+              <v n="TextDefault">"Allow X Positive"</v>
               <l n="LanguageTexts" t="ArrayList" />
             </o>
             <o>
@@ -26,13 +36,43 @@
               <l n="LanguageTexts" t="ArrayList" />
             </o>
             <o>
+              <v n="TextID">"326"</v>
+              <v n="TextDefault">"Allow y Negative"</v>
+              <l n="LanguageTexts" t="ArrayList" />
+            </o>
+            <o>
+              <v n="TextID">"504"</v>
+              <v n="TextDefault">"Allow Y Negative"</v>
+              <l n="LanguageTexts" t="ArrayList" />
+            </o>
+            <o>
               <v n="TextID">"92"</v>
               <v n="TextDefault">"Allow Y positive"</v>
               <l n="LanguageTexts" t="ArrayList" />
             </o>
             <o>
+              <v n="TextID">"962"</v>
+              <v n="TextDefault">"Allow Y Positive"</v>
+              <l n="LanguageTexts" t="ArrayList" />
+            </o>
+            <o>
+              <v n="TextID">"920"</v>
+              <v n="TextDefault">"Auto Seq"</v>
+              <l n="LanguageTexts" t="ArrayList" />
+            </o>
+            <o>
               <v n="TextID">"152"</v>
               <v n="TextDefault">"Auto Sequence"</v>
+              <l n="LanguageTexts" t="ArrayList" />
+            </o>
+            <o>
+              <v n="TextID">"348"</v>
+              <v n="TextDefault">"Axis 1 (X) Homed"</v>
+              <l n="LanguageTexts" t="ArrayList" />
+            </o>
+            <o>
+              <v n="TextID">"783"</v>
+              <v n="TextDefault">"Axis 2 (Y) Homed"</v>
               <l n="LanguageTexts" t="ArrayList" />
             </o>
             <o>
@@ -98,6 +138,16 @@
             <o>
               <v n="TextID">"217"</v>
               <v n="TextDefault">"Lift / Lower"</v>
+              <l n="LanguageTexts" t="ArrayList" />
+            </o>
+            <o>
+              <v n="TextID">"427"</v>
+              <v n="TextDefault">"Lift pallet"</v>
+              <l n="LanguageTexts" t="ArrayList" />
+            </o>
+            <o>
+              <v n="TextID">"111"</v>
+              <v n="TextDefault">"Lower pallet"</v>
               <l n="LanguageTexts" t="ArrayList" />
             </o>
             <o>

@@ -4,30 +4,31 @@
     <Declaration><![CDATA[{attribute 'qualified_only'}
 {attribute 'qualified_only'}
 VAR_GLOBAL
+	// Author RL
 	// Hardware axis references
-	Axis1               : AXIS_REF;
-	Axis2               : AXIS_REF;
+	Axis1               : AXIS_REF;	// X
+	Axis2               : AXIS_REF;	// Y
 	
-	// Core system control flags
-	bEnableAll          : BOOL := TRUE; 
-	bResetAll           : BOOL := FALSE;
-	bManualModeActive   : BOOL := FALSE; 
+	// Core system control
+	bEnableAll          : BOOL := TRUE;	// Enables the drives
+	bResetAll           : BOOL := FALSE;	// Resets possible servo errors
+	bManualModeActive   : BOOL := FALSE; 	// Enables manual driving
 	
-	// Homing inputs & status
+	// Homing inputs and status check after homing
 	bSensor_X           AT %I* : BOOL; 
 	bSensor_Y           AT %I* : BOOL;
 	bStartHoming        : BOOL := FALSE; 
 	bXHomed             : BOOL := FALSE; 
 	bYHomed             : BOOL := FALSE; 
 
-	// Live position registers
+	// Live axis position
 	fCurrentX           : LREAL := 0.0;
 	fCurrentY           : LREAL := 0.0;
 
-	// Hardware IO outputs
-	bZlifter            AT %Q* : BOOL;      // Solenoid (FALSE = Raised, TRUE = Lowered)
+	// "Z Axis" not really but kinda acts as a Z axis, this is a pneumatic lifter that is sitting on the Y axis
+	bZlifter            AT %Q* : BOOL;      // FALSE = Raised, TRUE = Lowered)
 	
-	// UI Manual Jog signals & variables
+	// Controls for manual driving, "Jogging"
 	bJogForwardX        : BOOL := FALSE;    
 	bJogForwardY        : BOOL := FALSE;    
 	bJogBackwardsX      : BOOL := FALSE;    
@@ -35,13 +36,13 @@ VAR_GLOBAL
 	fVelocityX          : LREAL := 5.0;
 	fVelocityY          : LREAL := 10.0;
 	
-	// Dynamically calculated safety gates
+	// These calculate if moving is allowed, based on current position
 	bX_Allow_Positive   : BOOL := FALSE;
 	bX_Allow_Negative   : BOOL := FALSE;
 	bY_Allow_Positive   : BOOL := FALSE;
 	bY_Allow_Negative   : BOOL := FALSE;
 	
-	// Universal state constants
+	// States
 	FORKS_IDLE          : INT := 0;
 	FORKS_UP            : INT := 1;
 	FORKS_DOWN          : INT := 2;
@@ -49,36 +50,35 @@ VAR_GLOBAL
 	nAutoState          : INT := 0; 
 	bStartAutoseq     	: BOOL := FALSE;
 	bAutoseqDone     	: BOOL := FALSE;
-	bRetrievalMode    	: BOOL := FALSE;  // FALSE = Put away pallets, TRUE = Take away palletsbStartAutoseq       : BOOL := FALSE;
+	bRetrievalMode    	: BOOL := FALSE;  // FALSE = Put away pallets, TRUE = Take away pallets
 
 	
 	nStepPointer        : INT := 1;
 	nSubPhase           : INT := 0;
 	nTotalSteps         : INT := 11;
 	
-	// (Keep your astPath array declaration exactly as it is below this line...)
 	
-	// Change total steps to 13 to cover the 10 shelf movements + 3 return segments
-
+	// This array system holds inside coordinates for the automatic sequence driving
+	// NOTE: Actions of the pneumatic lift are reversed when bRetrievalMode = TRUE
 	astPath : ARRAY[1..11] OF ST_MotionStep := [
-		// --- SHELF 1 CYCLE ---
-		(fTargetX := 2.8000, fTargetY := 0.0,      nZAction := 1), // 1. Move to aisle line & Raise forks
-		(fTargetX := 2.8000, fTargetY := -0.6247,  nZAction := 0), // 2. Drop Y to shelf 1 height
-		(fTargetX := 9.3720, fTargetY := -0.6247,  nZAction := 2), // 3. Drive deep into shelf & Lower forks
-		(fTargetX := 2.8000, fTargetY := -0.6247,  nZAction := 1), // 4. Retreat to aisle line & Raise forks
+		// "Shelf 1" cycle
+		(fTargetX := 2.8000, fTargetY := 0.0,      nZAction := 1), // 1. Move to line and raise forks
+		(fTargetX := 2.8000, fTargetY := -0.6247,  nZAction := 0), // 2. Moce Y to shelf 1 height
+		(fTargetX := 9.3720, fTargetY := -0.6247,  nZAction := 2), // 3. Drive in and lower forks
+		(fTargetX := 2.8000, fTargetY := -0.6247,  nZAction := 1), // 4. Retreat to safe line and raise forks
 		
-		// --- SHELF 2 CYCLE ---
+		// "Shelf 2" cycle
 		(fTargetX := 2.8000, fTargetY := -9.5381,  nZAction := 0), // 5. Drop Y to shelf 2 height
-		(fTargetX := 9.3720, fTargetY := -9.5381,  nZAction := 2), // 6. Drive deep into shelf & Lower forks
-		(fTargetX := 2.8000, fTargetY := -9.5381,  nZAction := 1), // 7. Retreat to aisle line & Raise forks
+		(fTargetX := 9.3720, fTargetY := -9.5381,  nZAction := 2), // 6. Drive in and lower forks
+		(fTargetX := 2.8000, fTargetY := -9.5381,  nZAction := 1), // 7. Retreat to safe line and raise forks
 		
-		// --- SHELF 3 CYCLE ---
+		// "Shelf 3" cycle
 		(fTargetX := 2.8000, fTargetY := -18.7514, nZAction := 0), // 8. Drop Y to shelf 3 height
-		(fTargetX := 9.3720, fTargetY := -18.7514, nZAction := 2), // 9. Drive deep into shelf & Lower forks
-		(fTargetX := 2.8000, fTargetY := -18.7514, nZAction := 1), // 10. Retreat to aisle line & Raise forks
+		(fTargetX := 9.3720, fTargetY := -18.7514, nZAction := 2), // 9. Drive in and lower forks
+		(fTargetX := 2.8000, fTargetY := -18.7514, nZAction := 1), // 10. Retreat to safe line and raise forks
 		
-		// --- HOME RUN ---
-		(fTargetX := 0.0,    fTargetY := 0.0,      nZAction := 0)  // 14. Return X and Y straight home
+		// Return to home after finishing
+		(fTargetX := 0.0,    fTargetY := 0.0,      nZAction := 0)  // 14. Return X and Y to home coordinates
 	];
 	
 END_VAR]]></Declaration>
