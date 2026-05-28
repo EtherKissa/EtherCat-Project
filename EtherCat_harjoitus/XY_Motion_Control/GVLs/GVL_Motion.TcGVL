@@ -55,12 +55,12 @@ VAR_GLOBAL
 	
 	nStepPointer        : INT := 1;
 	nSubPhase           : INT := 0;
-	nTotalSteps         : INT := 11;
+	nTotalSteps         : INT := 10;
 	
 	
 	// This array system holds inside coordinates for the automatic sequence driving
 	// NOTE: Actions of the pneumatic lift are reversed when bRetrievalMode = TRUE
-	astPath : ARRAY[1..11] OF ST_MotionStep := [
+	astPath : ARRAY[1..10] OF ST_MotionStep := [
 		// "Shelf 1" cycle
 		(fTargetX := 2.8000, fTargetY := 0.0,      nZAction := 1), // 1. Move to line and raise forks
 		(fTargetX := 2.8000, fTargetY := -0.6247,  nZAction := 0), // 2. Moce Y to shelf 1 height
@@ -68,17 +68,15 @@ VAR_GLOBAL
 		(fTargetX := 2.8000, fTargetY := -0.6247,  nZAction := 1), // 4. Retreat to safe line and raise forks
 		
 		// "Shelf 2" cycle
-		(fTargetX := 2.8000, fTargetY := -9.5381,  nZAction := 0), // 5. Drop Y to shelf 2 height
-		(fTargetX := 9.3720, fTargetY := -9.5381,  nZAction := 2), // 6. Drive in and lower forks
-		(fTargetX := 2.8000, fTargetY := -9.5381,  nZAction := 1), // 7. Retreat to safe line and raise forks
+		(fTargetX := 2.8000, fTargetY := -9.5381,	nZAction := 0), // 5. Drop Y to shelf 2 height
+		(fTargetX := 9.3720, fTargetY := -9.5381,	nZAction := 2), // 6. Drive in and lower forks
+		(fTargetX := 2.8000, fTargetY := -9.5381,	nZAction := 1), // 7. Retreat to safe line and raise forks
 		
 		// "Shelf 3" cycle
-		(fTargetX := 2.8000, fTargetY := -18.7514, nZAction := 0), // 8. Drop Y to shelf 3 height
-		(fTargetX := 9.3720, fTargetY := -18.7514, nZAction := 2), // 9. Drive in and lower forks
-		(fTargetX := 2.8000, fTargetY := -18.7514, nZAction := 1), // 10. Retreat to safe line and raise forks
-		
-		// Return to home after finishing
-		(fTargetX := 0.0,    fTargetY := 0.0,      nZAction := 0)  // 14. Return X and Y to home coordinates
+		(fTargetX := 2.8000, fTargetY := -18.7514,	nZAction := 0), // 8. Drop Y to shelf 3 height
+		(fTargetX := 9.3720, fTargetY := -18.7514,	nZAction := 2), // 9. Drive in and lower forks
+		(fTargetX := 0.0,	 fTargetY := 0.0,		nZAction := 0) // 10. Drive home.
+
 	];
 	
 END_VAR]]></Declaration>

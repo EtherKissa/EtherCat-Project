@@ -1746,7 +1746,7 @@ External Setpoint Generation:
 		</Motion>
 		<Plc>
 			<Project GUID="{02AB9690-0BAD-46EA-9038-AEAD0D446227}" Name="XY_Motion_Control" PrjFilePath="XY_Motion_Control\XY_Motion_Control.plcproj" TmcFilePath="XY_Motion_Control\XY_Motion_Control.tmc" ReloadTmc="true" AmsPort="851" FileArchiveSettings="#x000e" SymbolicMapping="true">
-				<Instance Id="#x08502000" TcSmClass="TComPlcObjDef" KeepUnrestoredLinks="1" TmcPath="XY_Motion_Control\XY_Motion_Control.tmc" TmcHash="{3038451E-7FBA-BF66-85DC-8F825F456FB3}">
+				<Instance Id="#x08502000" TcSmClass="TComPlcObjDef" KeepUnrestoredLinks="1" TmcPath="XY_Motion_Control\XY_Motion_Control.tmc" TmcHash="{85D80D24-9ABB-05BF-4F89-19918491CD85}">
 					<Name>Motion_Control</Name>
 					<CLSID ClassFactory="TcPlc30">{08500001-0000-0000-F000-000000000064}</CLSID>
 					<Vars VarGrpType="1">
