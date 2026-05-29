@@ -55,15 +55,15 @@ VAR_GLOBAL
 	
 	nStepPointer        : INT := 1;
 	nSubPhase           : INT := 0;
-	nTotalSteps         : INT := 10;
+	nTotalSteps         : INT := 9;
 	
 	
 	// This array system holds inside coordinates for the automatic sequence driving
 	// NOTE: Actions of the pneumatic lift are reversed when bRetrievalMode = TRUE
-	astPath : ARRAY[1..10] OF ST_MotionStep := [
+	astPath : ARRAY[1..9] OF ST_MotionStep := [
 		// "Shelf 1" cycle
-		(fTargetX := 2.8000, fTargetY := 0.0,      nZAction := 1), // 1. Move to line and raise forks
-		(fTargetX := 2.8000, fTargetY := -0.6247,  nZAction := 0), // 2. Moce Y to shelf 1 height
+		
+		(fTargetX := 2.8000, fTargetY := -0.6247,  nZAction := 1), // 2. Moce Y to shelf 1 height
 		(fTargetX := 9.3720, fTargetY := -0.6247,  nZAction := 2), // 3. Drive in and lower forks
 		(fTargetX := 2.8000, fTargetY := -0.6247,  nZAction := 1), // 4. Retreat to safe line and raise forks
 		
@@ -75,8 +75,10 @@ VAR_GLOBAL
 		// "Shelf 3" cycle
 		(fTargetX := 2.8000, fTargetY := -18.7514,	nZAction := 0), // 8. Drop Y to shelf 3 height
 		(fTargetX := 9.3720, fTargetY := -18.7514,	nZAction := 2), // 9. Drive in and lower forks
-		(fTargetX := 0.0,	 fTargetY := 0.0,		nZAction := 0) // 10. Drive home.
-
+		(fTargetX := 0.0,	 fTargetY := -18.7514,	nZAction := 1)
+		
+		
+		// The auto sequence automatically handles moving X and Y back to 0.0 after this step	
 	];
 	
 END_VAR]]></Declaration>

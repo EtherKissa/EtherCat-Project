@@ -166,6 +166,11 @@
               <l n="LanguageTexts" t="ArrayList" />
             </o>
             <o>
+              <v n="TextID">"433"</v>
+              <v n="TextDefault">"SERVO DRIVE FAULT ACTIVE"</v>
+              <l n="LanguageTexts" t="ArrayList" />
+            </o>
+            <o>
               <v n="TextID">"366"</v>
               <v n="TextDefault">"Start Auto Sequence"</v>
               <l n="LanguageTexts" t="ArrayList" />
@@ -193,6 +198,11 @@
             <o>
               <v n="TextID">"191"</v>
               <v n="TextDefault">"y sensor"</v>
+              <l n="LanguageTexts" t="ArrayList" />
+            </o>
+            <o>
+              <v n="TextID">"115"</v>
+              <v n="TextDefault">"⚠️ SERVO DRIVE FAULT ACTIVE ⚠️"</v>
               <l n="LanguageTexts" t="ArrayList" />
             </o>
           </l>

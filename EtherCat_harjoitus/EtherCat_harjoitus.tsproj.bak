@@ -1465,6 +1465,8 @@ External Setpoint Generation:
 					</AxisPara>
 					<Encoder Name="Enc" EncType="19">
 						<EncPara ScaleFactorNumerator="3.8147e-05" MaxCount="#xffffffff">
+							<SoftEndMinControl Enable="true" Range="-0.1"/>
+							<SoftEndMaxControl Enable="true" Range="9.9"/>
 							<Inc RefSearchInverse="true" RefSoftSyncMask="#xffffffff"/>
 						</EncPara>
 						<Vars VarGrpType="1">
@@ -1608,6 +1610,8 @@ External Setpoint Generation:
 					</AxisPara>
 					<Encoder Name="Enc" EncType="19">
 						<EncPara MaxCount="#xffffffff">
+							<SoftEndMinControl Enable="true" Range="-34"/>
+							<SoftEndMaxControl Enable="true"/>
 							<Inc RefSoftSyncMask="#xffffffff"/>
 						</EncPara>
 						<Vars VarGrpType="1">
@@ -1746,7 +1750,7 @@ External Setpoint Generation:
 		</Motion>
 		<Plc>
 			<Project GUID="{02AB9690-0BAD-46EA-9038-AEAD0D446227}" Name="XY_Motion_Control" PrjFilePath="XY_Motion_Control\XY_Motion_Control.plcproj" TmcFilePath="XY_Motion_Control\XY_Motion_Control.tmc" ReloadTmc="true" AmsPort="851" FileArchiveSettings="#x000e" SymbolicMapping="true">
-				<Instance Id="#x08502000" TcSmClass="TComPlcObjDef" KeepUnrestoredLinks="1" TmcPath="XY_Motion_Control\XY_Motion_Control.tmc" TmcHash="{028F1422-146F-9B26-E158-318FBE44F9E9}">
+				<Instance Id="#x08502000" TcSmClass="TComPlcObjDef" KeepUnrestoredLinks="1" TmcPath="XY_Motion_Control\XY_Motion_Control.tmc" TmcHash="{D216BAD3-7E24-576F-45A5-037D41B6E085}">
 					<Name>Motion_Control</Name>
 					<CLSID ClassFactory="TcPlc30">{08500001-0000-0000-F000-000000000064}</CLSID>
 					<Vars VarGrpType="1">
