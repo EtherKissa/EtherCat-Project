@@ -10,7 +10,7 @@ VAR_GLOBAL
 	Axis2               : AXIS_REF;	// Y
 	
 	// Core system control
-	bEnableAll          : BOOL := TRUE;	// Enables the drives
+	bEnableAll          : BOOL := TRUE;		// Enables the servo drives
 	bResetAll           : BOOL := FALSE;	// Resets possible servo errors
 	bManualModeActive   : BOOL := FALSE; 	// Enables manual driving
 	
@@ -43,13 +43,14 @@ VAR_GLOBAL
 	bY_Allow_Negative   : BOOL := FALSE;
 	
 	// States
-	FORKS_IDLE          : INT := 0;
-	FORKS_UP            : INT := 1;
-	FORKS_DOWN          : INT := 2;
+	Z_IDLE          : INT := 0;
+	Z_UP            : INT := 1;
+	Z_DOWN          : INT := 2;
 	
-	nAutoState          : INT := 0; 
+	iAutoState          : INT := 0; 
 	bStartAutoseq     	: BOOL := FALSE;
 	bAutoseqDone     	: BOOL := FALSE;
+	bSequenceRunning	: BOOL;
 	bRetrievalMode    	: BOOL := FALSE;  // FALSE = Put away pallets, TRUE = Take away pallets
 	
 	bExecuteMoveX    : BOOL;
@@ -58,9 +59,9 @@ VAR_GLOBAL
     fTargetY         : LREAL;
 
 	
-	nStepPointer        : INT := 1;
-	nSubPhase           : INT := 0;
-	nTotalSteps         : INT := 9;
+	iStepPointer        : INT := 1;
+	iSubPhase           : INT := 0;
+	iTotalSteps         : INT := 9;
 	
 	
 	// This array system holds inside coordinates for the automatic sequence driving
@@ -80,7 +81,7 @@ VAR_GLOBAL
 		// "Shelf 3" cycle
 		(fTargetX := 2.8000, fTargetY := -18.7514,	nZAction := 0), // 8. Drop Y to shelf 3 height
 		(fTargetX := 9.3720, fTargetY := -18.7514,	nZAction := 2), // 9. Drive in and lower forks
-		(fTargetX := 0.0,	 fTargetY := -18.7514,	nZAction := 1)
+		(fTargetX := 0.0,	 fTargetY := -18.7514,	nZAction := 1)	// 10. Drive X out to 0 keep Y still
 		
 		
 		// The auto sequence automatically handles moving X and Y back to 0.0 after this step	

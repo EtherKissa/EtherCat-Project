@@ -1573,10 +1573,9 @@
                 <n n="VisualElementFrameInformation" />
                 <d n="VisualElementInputActions" t="Hashtable" ckt="String" cvt="IInputAction[]">
                   <v>OnMouseClick</v>
-                  <a cet="ToggleVarInputAction">
+                  <a cet="STSnippetInputAction">
                     <o>
-                      <v n="ToggleVariable">"GVL_Motion.bStartAutoseq"</v>
-                      <n n="Error" />
+                      <v n="STSnippet">"GVL_Motion.bStartAutoseq := TRUE;"</v>
                     </o>
                   </a>
                 </d>
@@ -3733,7 +3732,7 @@
                     </o>
                     <o>
                       <v n="Id">743958181L</v>
-                      <v n="Value">"GVL_Motion.bStartAutoseq"</v>
+                      <v n="Value">"GVL_Motion.bSequenceRunning"</v>
                     </o>
                     <o>
                       <v n="Id">2597686782L</v>

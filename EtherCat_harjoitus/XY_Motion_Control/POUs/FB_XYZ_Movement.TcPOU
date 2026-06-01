@@ -3,7 +3,7 @@
   <POU Name="FB_XYZ_Movement" Id="{c3e8fe8c-fd5a-43cc-a474-ef87a85d6250}" SpecialFunc="None">
     <Declaration><![CDATA[FUNCTION_BLOCK FB_XYZ_Movement
 VAR_IN_OUT
-    // Axis references passed directly from physical hardware tasks
+    // Axis references
     Axis1                : AXIS_REF; // X
     Axis2                : AXIS_REF; // Y
 END_VAR
@@ -11,26 +11,37 @@ VAR
     // Hardware Power and Reset Blocks
     fbPower1             : MC_Power;
     fbPower2             : MC_Power;
+	
     fbReset1             : MC_Reset;
     fbReset2             : MC_Reset;
     
-    // Core Motion Instances (Kept safe inside cyclical memory)
+    // Core Motion Instances
     fbAutoMoveX          : MC_MoveAbsolute;
     fbAutoMoveY          : MC_MoveAbsolute;
+	
     fbDriveToSensorX     : MC_MoveVelocity;
     fbDriveToSensorY     : MC_MoveVelocity;
+	
     fbStopX              : MC_Stop;
     fbStopY              : MC_Stop;
+	
     fbLockZeroX          : MC_SetPosition;
     fbLockZeroY          : MC_SetPosition;
+	
     fbJogX               : MC_Jog;
     fbJogY               : MC_Jog;
+	
+	//Safety position reference
+	fActPosX				 : LREAL;
+	fActPosY				 : LREAL;
 END_VAR]]></Declaration>
     <Implementation>
-      <ST><![CDATA[// ----- 1. Evaluate Dynamic Safety Boundaries First
+      <ST><![CDATA[// Safety first, position reference form axis
+fActPosX	:= Axis1.NcToPlc.ActPos;
+fActPosY	:= Axis2.NcToPlc.ActPos;
 THIS^.M_UpdateSafety();
 
-// ----- 2. Physical Axis Power Control loops
+// Axis Power, directional enables based on position
 fbPower1(
     Axis            := Axis1, 
     Enable          := GVL_Motion.bEnableAll, 
@@ -46,17 +57,19 @@ fbPower2(
 );
 
 // NC Kernel Error Resets
-fbReset1(Axis := Axis1, Execute := GVL_Motion.bResetAll);
-fbReset2(Axis := Axis2, Execute := GVL_Motion.bResetAll);
+fbReset1(
+	Axis := Axis1,
+	Execute := GVL_Motion.bResetAll);
+	
+fbReset2(
+	Axis := Axis2,
+	Execute := GVL_Motion.bResetAll);
 
 IF GVL_Motion.bResetAll THEN
     GVL_Motion.bResetAll := FALSE;
 END_IF
 
-
-// ----- 3. Centralized Motion Routing Engine -----
-
-// A. Automated Sequence Driving Engine (Only fires if not in manual mode)
+// Automated sequence, axis ref and enables, edit velocity if needed
 fbAutoMoveX(
     Axis     := Axis1, 
     Execute  := GVL_Motion.bExecuteMoveX AND NOT GVL_Motion.bManualModeActive, 
@@ -72,7 +85,7 @@ fbAutoMoveY(
 );
 
 
-// B. Manual Jogging Control Engine (Only active during Manual Mode and when Auto sequence is idle)
+// Manual control, axis ref and enables
 fbJogX(
     Axis         := Axis1,
     JogForward   := GVL_Motion.bJogForwardX AND GVL_Motion.bX_Allow_Positive AND GVL_Motion.bManualModeActive AND NOT GVL_Motion.bStartAutoseq,
@@ -89,23 +102,51 @@ fbJogY(
     Velocity     := GVL_Motion.fVelocityY
 );
 
-// Safety reset to turn off manual jogging when switched away from manual mode
+// Safety reset to turn off manual jogging if switched away from manual mode
 IF NOT GVL_Motion.bManualModeActive THEN
-    fbJogX(Axis := Axis1, JogForward := FALSE, JogBackwards := FALSE);
-    fbJogY(Axis := Axis2, JogForward := FALSE, JogBackwards := FALSE);
+    fbJogX(
+		Axis := Axis1,
+		JogForward := FALSE,
+		JogBackwards := FALSE);
+		
+    fbJogY(
+		Axis := Axis2,
+		JogForward := FALSE,
+		JogBackwards := FALSE);
 END_IF
 
+// Homing
+fbDriveToSensorX(
+	Axis := Axis1,
+	Execute := GVL_Motion.bStartHoming,
+	Velocity := 5.0,
+	Direction := MC_Negative_Direction);
+	
+fbStopX(
+	Axis := Axis1,
+	Execute := GVL_Motion.bStartHoming AND GVL_Motion.bSensor_X);
+	
+fbLockZeroX(
+	Axis := Axis1,
+	Execute := GVL_Motion.bStartHoming AND fbStopX.Done,
+	Position := 0.0);
 
-// C. Homing Calibration Engine (Only active during Calibration phase)
-fbDriveToSensorX(Axis := Axis1, Execute := GVL_Motion.bStartHoming, Velocity := 5.0, Direction := MC_Negative_Direction);
-fbStopX(Axis := Axis1, Execute := GVL_Motion.bStartHoming AND GVL_Motion.bSensor_X);
-fbLockZeroX(Axis := Axis1, Execute := GVL_Motion.bStartHoming AND fbStopX.Done, Position := 0.0);
+fbDriveToSensorY(
+	Axis := Axis2,
+	Execute := GVL_Motion.bStartHoming,
+	Velocity := 17.0,
+	Direction := MC_Positive_Direction);
+	
+fbStopY(
+	Axis := Axis2,
+	Execute := GVL_Motion.bStartHoming AND GVL_Motion.bSensor_Y);
+	
+fbLockZeroY(
+	Axis := Axis2,
+	Execute := GVL_Motion.bStartHoming AND fbStopY.Done,
+	Position := 0.0);
 
-fbDriveToSensorY(Axis := Axis2, Execute := GVL_Motion.bStartHoming, Velocity := 17.0, Direction := MC_Positive_Direction);
-fbStopY(Axis := Axis2, Execute := GVL_Motion.bStartHoming AND GVL_Motion.bSensor_Y);
-fbLockZeroY(Axis := Axis2, Execute := GVL_Motion.bStartHoming AND fbStopY.Done, Position := 0.0);
-
-// Handshake evaluations
+// Homing indication
 IF fbLockZeroX.Done THEN 
     GVL_Motion.bXHomed := TRUE;
 END_IF
@@ -114,20 +155,36 @@ IF fbLockZeroY.Done THEN
     GVL_Motion.bYHomed := TRUE;
 END_IF
 
-// Reset Homing flag once both axes have established home tracking references
+// Reset Homing when done
 IF GVL_Motion.bXHomed AND GVL_Motion.bYHomed THEN
     GVL_Motion.bStartHoming := FALSE;
 END_IF
 
-// Reset the homing execution blocks so they can detect the next rising edge command later
+// Reset homing executions, so that homing can be done again if needed
 IF NOT GVL_Motion.bStartHoming THEN
-    fbDriveToSensorX(Axis := Axis1, Execute := FALSE);
-    fbStopX(Axis := Axis1, Execute := FALSE);
-    fbLockZeroX(Axis := Axis1, Execute := FALSE);
+    fbDriveToSensorX(
+		Axis := Axis1,
+		Execute := FALSE);
+		
+    fbStopX(
+		Axis := Axis1,
+		Execute := FALSE);
+		
+    fbLockZeroX(
+		Axis := Axis1,
+		Execute := FALSE);
     
-    fbDriveToSensorY(Axis := Axis2, Execute := FALSE);
-    fbStopY(Axis := Axis2, Execute := FALSE);
-    fbLockZeroY(Axis := Axis2, Execute := FALSE);
+    fbDriveToSensorY(
+		Axis := Axis2,
+		Execute := FALSE);
+    
+	fbStopY(
+		Axis := Axis2, 
+		Execute := FALSE);
+    
+	fbLockZeroY(
+		Axis := Axis2,
+		Execute := FALSE);
 END_IF]]></ST>
     </Implementation>
     <Method Name="M_UpdateSafety" Id="{597cea4c-363a-414d-b6d6-d4db2aedbbb3}">
@@ -138,9 +195,13 @@ END_VAR
 ]]></Declaration>
       <Implementation>
         <ST><![CDATA[//Author RL
-// 1. System position, read from axis
-GVL_Motion.fCurrentX := Axis1.NcToPlc.ActPos;
-GVL_Motion.fCurrentY := Axis2.NcToPlc.ActPos; 
+// System position
+GVL_Motion.fCurrentX := fActPosX;
+GVL_Motion.fCurrentY := fActPosY;
+
+IF GVL_Motion.bSequenceRunning THEN
+    GVL_Motion.bManualModeActive := FALSE;
+END_IF
 
 IF GVL_Motion.bStartHoming THEN
     // During homing all movement is allowed
@@ -172,12 +233,53 @@ END_IF]]></ST>
       </Implementation>
     </Method>
     <LineIds Name="FB_XYZ_Movement">
-      <LineId Id="502" Count="100" />
+      <LineId Id="502" Count="0" />
+      <LineId Id="689" Count="1" />
+      <LineId Id="503" Count="18" />
+      <LineId Id="628" Count="0" />
+      <LineId Id="627" Count="0" />
+      <LineId Id="630" Count="0" />
+      <LineId Id="522" Count="0" />
+      <LineId Id="631" Count="1" />
+      <LineId Id="523" Count="3" />
+      <LineId Id="530" Count="36" />
+      <LineId Id="633" Count="3" />
+      <LineId Id="567" Count="0" />
+      <LineId Id="637" Count="2" />
+      <LineId Id="568" Count="0" />
+      <LineId Id="570" Count="2" />
+      <LineId Id="640" Count="4" />
+      <LineId Id="573" Count="0" />
+      <LineId Id="645" Count="2" />
+      <LineId Id="574" Count="0" />
+      <LineId Id="648" Count="2" />
+      <LineId Id="575" Count="1" />
+      <LineId Id="651" Count="4" />
+      <LineId Id="577" Count="0" />
+      <LineId Id="656" Count="2" />
+      <LineId Id="578" Count="0" />
+      <LineId Id="659" Count="2" />
+      <LineId Id="579" Count="17" />
+      <LineId Id="662" Count="2" />
+      <LineId Id="597" Count="0" />
+      <LineId Id="665" Count="2" />
+      <LineId Id="598" Count="0" />
+      <LineId Id="669" Count="0" />
+      <LineId Id="668" Count="0" />
+      <LineId Id="599" Count="1" />
+      <LineId Id="670" Count="1" />
+      <LineId Id="601" Count="0" />
+      <LineId Id="672" Count="2" />
+      <LineId Id="602" Count="0" />
+      <LineId Id="675" Count="2" />
       <LineId Id="442" Count="0" />
     </LineIds>
     <LineIds Name="FB_XYZ_Movement.M_UpdateSafety">
       <LineId Id="52" Count="0" />
-      <LineId Id="34" Count="9" />
+      <LineId Id="34" Count="2" />
+      <LineId Id="90" Count="2" />
+      <LineId Id="89" Count="0" />
+      <LineId Id="37" Count="6" />
       <LineId Id="69" Count="0" />
       <LineId Id="44" Count="0" />
       <LineId Id="78" Count="0" />
