@@ -1,0 +1,176 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="AutoSequence" Id="{66be7a83-b643-4cf9-8506-a45e5e049ccf}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM AutoSequence
+VAR
+    bSequenceResetPulse : BOOL;
+    tPneumaticDelay     : TON;
+    bOldZlifter         : BOOL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[// Author RL
+IF GVL_Motion.bStartAutoseq AND GVL_Motion.bXHomed AND GVL_Motion.bYHomed THEN
+    bSequenceResetPulse := FALSE;
+
+    // Check if there are still valid steps left to run in path array
+    IF GVL_Motion.nStepPointer <= GVL_Motion.nTotalSteps THEN
+    
+         CASE GVL_Motion.nSubPhase OF
+            0: // Initialize sequence settings on first boot
+                tPneumaticDelay(IN := FALSE);
+				
+                GVL_Motion.bAutoseqDone := FALSE;
+                // Start with safety check
+                GVL_Motion.nSubPhase := 2; 
+                
+            2: // Safety Check: Pull X to home if not at home before changing Y position
+                IF GVL_Motion.fCurrentX > 0.05 THEN
+                    GVL_Motion.fTargetX := 0.0;
+                    GVL_Motion.fTargetY := GVL_Motion.fCurrentY; // Lock Y axis while X retracts
+                    GVL_Motion.bExecuteMoveX := TRUE;
+                    GVL_Motion.bExecuteMoveY := FALSE;
+                    
+                    // FIXED: Changed FB_XYZ_Movement to MAIN.XYZ
+                    IF MAIN.XYZ.fbAutoMoveX.Done AND NOT MAIN.XYZ.fbAutoMoveX.Busy AND NOT MAIN.XYZ.fbAutoMoveY.Busy THEN
+                        GVL_Motion.bExecuteMoveX := FALSE;
+                        GVL_Motion.nSubPhase := 4; 
+                    END_IF
+                ELSE
+                    GVL_Motion.bExecuteMoveX := FALSE;
+                    GVL_Motion.nSubPhase := 4; 
+                END_IF
+
+            4: // Evaluate if the forks need to actuate for the current step
+                bOldZlifter := GVL_Motion.bZlifter;
+
+                // Set valve target outputs based on whether we are lifting or lowering
+                IF NOT GVL_Motion.bRetrievalMode THEN
+                    IF GVL_Motion.astPath[GVL_Motion.nStepPointer].nZAction = GVL_Motion.FORKS_UP THEN
+                        GVL_Motion.bZlifter := FALSE; 
+                    ELSIF GVL_Motion.astPath[GVL_Motion.nStepPointer].nZAction = GVL_Motion.FORKS_DOWN THEN
+                        GVL_Motion.bZlifter := TRUE; 
+                    END_IF
+                ELSE
+                    IF GVL_Motion.astPath[GVL_Motion.nStepPointer].nZAction = GVL_Motion.FORKS_UP THEN
+                        GVL_Motion.bZlifter := TRUE; 
+                    ELSIF GVL_Motion.astPath[GVL_Motion.nStepPointer].nZAction = GVL_Motion.FORKS_DOWN THEN
+                        GVL_Motion.bZlifter := FALSE; 
+                    END_IF
+                END_IF
+                
+                IF GVL_Motion.bZlifter = bOldZlifter THEN
+                    GVL_Motion.nSubPhase := 8; 
+                ELSE
+                    GVL_Motion.nSubPhase := 6; 
+                END_IF
+                
+            6: // 1.5 sec delay after Z moves to avoid unwanted disasters
+                tPneumaticDelay(IN := TRUE, PT := T#1500MS);
+                IF tPneumaticDelay.Q THEN 
+                    tPneumaticDelay(IN := FALSE); 
+                    GVL_Motion.nSubPhase := 8; 
+                END_IF
+                
+            8: 
+                // If the step is pulling back out to home, force X to move first to avoid collision
+                IF GVL_Motion.astPath[GVL_Motion.nStepPointer].fTargetX = 0.0 THEN
+                    IF ABS(GVL_Motion.fCurrentX - GVL_Motion.astPath[GVL_Motion.nStepPointer].fTargetX) > 0.05 THEN
+                        GVL_Motion.fTargetX := GVL_Motion.astPath[GVL_Motion.nStepPointer].fTargetX; 
+                        GVL_Motion.fTargetY := GVL_Motion.fCurrentY; // Keep Y still while X moves
+                        GVL_Motion.bExecuteMoveX := TRUE; 
+                        GVL_Motion.bExecuteMoveY := FALSE; 
+                    ELSIF NOT MAIN.XYZ.fbAutoMoveX.Busy THEN // FIXED: Changed FB_XYZ_Movement to MAIN.XYZ
+                        GVL_Motion.fTargetX := GVL_Motion.fCurrentX; 
+                        GVL_Motion.fTargetY := GVL_Motion.astPath[GVL_Motion.nStepPointer].fTargetY;
+                        GVL_Motion.bExecuteMoveX := FALSE; 
+                        GVL_Motion.bExecuteMoveY := TRUE;
+                    ELSE
+                        GVL_Motion.bExecuteMoveX := FALSE;
+                        GVL_Motion.bExecuteMoveY := FALSE;
+                    END_IF
+                    
+                // Moving in to new shelves, Y moves first
+                ELSE
+                    IF ABS(GVL_Motion.fCurrentY - GVL_Motion.astPath[GVL_Motion.nStepPointer].fTargetY) > 0.05 THEN
+                        GVL_Motion.fTargetX := GVL_Motion.fCurrentX; // Keep X still while Y moves
+                        GVL_Motion.fTargetY := GVL_Motion.astPath[GVL_Motion.nStepPointer].fTargetY;
+                        GVL_Motion.bExecuteMoveX := FALSE; 
+                        GVL_Motion.bExecuteMoveY := TRUE;
+                    ELSIF NOT MAIN.XYZ.fbAutoMoveY.Busy THEN // FIXED: Changed FB_XYZ_Movement to MAIN.XYZ
+                        GVL_Motion.fTargetX := GVL_Motion.astPath[GVL_Motion.nStepPointer].fTargetX; 
+                        GVL_Motion.fTargetY := GVL_Motion.fCurrentY;
+                        GVL_Motion.bExecuteMoveX := TRUE; 
+                        GVL_Motion.bExecuteMoveY := FALSE; 
+                    ELSE
+                        GVL_Motion.bExecuteMoveX := FALSE;
+                        GVL_Motion.bExecuteMoveY := FALSE;
+                    END_IF
+                END_IF
+                
+                // Servo feedback check to verify moves done using central tracking bits
+                // FIXED: Changed FB_XYZ_Movement to MAIN.XYZ on all checks below
+                IF GVL_Motion.nSubPhase = 8 
+                    AND (NOT GVL_Motion.bExecuteMoveX OR (MAIN.XYZ.fbAutoMoveX.Done AND NOT MAIN.XYZ.fbAutoMoveX.Busy)) 
+                    AND (NOT GVL_Motion.bExecuteMoveY OR (MAIN.XYZ.fbAutoMoveY.Done AND NOT MAIN.XYZ.fbAutoMoveY.Busy)) 
+                    AND NOT MAIN.XYZ.fbAutoMoveX.Busy AND NOT MAIN.XYZ.fbAutoMoveY.Busy THEN
+                    
+                    GVL_Motion.bExecuteMoveX := FALSE; 
+                    GVL_Motion.bExecuteMoveY := FALSE;
+                    
+                    IF GVL_Motion.nStepPointer = GVL_Motion.nTotalSteps THEN
+                        GVL_Motion.nSubPhase := 10; 
+                    ELSE
+                        GVL_Motion.nStepPointer := GVL_Motion.nStepPointer + 1; 
+                        
+                        IF GVL_Motion.astPath[GVL_Motion.nStepPointer].nZAction = 0 THEN
+                            GVL_Motion.nSubPhase := 8;
+                        ELSE
+                            GVL_Motion.nSubPhase := 4;
+                        END_IF
+                    END_IF
+                END_IF
+
+            10: // Return home
+                GVL_Motion.fTargetX := 0.0; 
+                GVL_Motion.fTargetY := 0.0;
+                GVL_Motion.bExecuteMoveX := FALSE; 
+                GVL_Motion.bExecuteMoveY := TRUE; 
+                
+                // Reset sequence flags for next loop run
+                // FIXED: Changed FB_XYZ_Movement to MAIN.XYZ
+                IF MAIN.XYZ.fbAutoMoveY.Done AND NOT MAIN.XYZ.fbAutoMoveY.Busy AND NOT MAIN.XYZ.fbAutoMoveX.Busy THEN
+                    GVL_Motion.bExecuteMoveY := FALSE; 
+                    GVL_Motion.bZlifter := NOT GVL_Motion.bRetrievalMode; 
+                    
+                    GVL_Motion.bAutoseqDone := TRUE;
+                    GVL_Motion.bStartAutoseq := FALSE; 
+                    GVL_Motion.nStepPointer := 1; 
+                    GVL_Motion.nSubPhase := 0;
+                END_IF
+          END_CASE
+    ELSE
+        GVL_Motion.bAutoseqDone := TRUE; 
+        GVL_Motion.bStartAutoseq := FALSE; 
+        GVL_Motion.nStepPointer := 1; 
+        GVL_Motion.nSubPhase := 0;
+    END_IF
+ELSE
+    GVL_Motion.bExecuteMoveX := FALSE; 
+    GVL_Motion.bExecuteMoveY := FALSE; 
+    tPneumaticDelay(IN := FALSE);
+    
+    IF NOT GVL_Motion.bAutoseqDone THEN
+        bSequenceResetPulse := TRUE;
+    ELSE
+        bSequenceResetPulse := FALSE;
+    END_IF
+END_IF]]></ST>
+    </Implementation>
+    <LineIds Name="AutoSequence">
+      <LineId Id="1518" Count="9" />
+      <LineId Id="1675" Count="0" />
+      <LineId Id="1528" Count="144" />
+      <LineId Id="1503" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

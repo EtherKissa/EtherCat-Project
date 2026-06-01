@@ -20,14 +20,14 @@
     <Compile Include="DUTs\ST_MotionStep.TcDUT">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="GlobalTextList.TcGTLO">
-      <SubType>Code</SubType>
-    </Compile>
     <Compile Include="GVLs\GVL_Motion.TcGVL">
       <SubType>Code</SubType>
       <LinkAlways>true</LinkAlways>
     </Compile>
     <Compile Include="PlcTask.TcTTO">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="POUs\AutoSequence.TcPOU">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="POUs\FB_XYZ_Movement.TcPOU">

@@ -4,17 +4,18 @@
     <Declaration><![CDATA[// Author RL
 PROGRAM MAIN
 VAR
-	ForkliftControl 		: FB_XYZ_Movement;
+	XYZ	: FB_XYZ_Movement;
 END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[// Execute the entire system
-ForkliftControl(Axis1 := GVL_Motion.Axis1, Axis2 := GVL_Motion.Axis2);
-]]></ST>
+AutoSequence();
+
+XYZ(Axis1 := GVL_Motion.Axis1, Axis2 := GVL_Motion.Axis2);]]></ST>
     </Implementation>
     <LineIds Name="MAIN">
       <LineId Id="621" Count="0" />
+      <LineId Id="647" Count="1" />
       <LineId Id="602" Count="0" />
-      <LineId Id="627" Count="0" />
     </LineIds>
   </POU>
 </TcPlcObject>

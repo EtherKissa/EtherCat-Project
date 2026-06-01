@@ -51,6 +51,11 @@ VAR_GLOBAL
 	bStartAutoseq     	: BOOL := FALSE;
 	bAutoseqDone     	: BOOL := FALSE;
 	bRetrievalMode    	: BOOL := FALSE;  // FALSE = Put away pallets, TRUE = Take away pallets
+	
+	bExecuteMoveX    : BOOL;
+    bExecuteMoveY    : BOOL;
+    fTargetX         : LREAL;
+    fTargetY         : LREAL;
 
 	
 	nStepPointer        : INT := 1;
