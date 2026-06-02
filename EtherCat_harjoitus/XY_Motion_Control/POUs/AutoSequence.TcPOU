@@ -10,34 +10,38 @@ VAR
 END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[// Author RL
-IF GVL_Motion.bStartAutoseq AND GVL_Motion.bXHomed AND GVL_Motion.bYHomed THEN
-    GVL_Motion.bStartAutoseq 	:= FALSE; // <--- WIPES THE HMI BUTTON BACK TO FALSE IMMEDIATELY!
-    GVL_Motion.bSequenceRunning	:= TRUE;  // Locks sequence execution into internal PLC memory
-    GVL_Motion.bAutoseqDone  	:= FALSE; // Clear old done flag for the new run
-    GVL_Motion.iSubPhase     	:= 0;     // Ensure we start from phase 0
+IF GVL_Motion.bStartAutoseq AND GVL_Motion.bXHomed AND GVL_Motion.bYHomed AND NOT GVL_Motion.bSequenceRunning THEN
+    GVL_Motion.bStartAutoseq    := FALSE; // Laittaa HMI nappulan FALSE
+    GVL_Motion.bSequenceRunning := TRUE;  // FIXED: Ensure this variable matches below
+    GVL_Motion.bAutoseqDone     := FALSE;
+	
+	GVL_Motion.iStepPointer     := 1;     // Forces pointer sync on cycle 0
+    GVL_Motion.bExecuteMoveX    := FALSE; // Wipes old move triggers
+    GVL_Motion.bExecuteMoveY    := FALSE; // Wipes old move triggers
+	
+    GVL_Motion.iSubPhase        := 0;
+	
 END_IF
 
-// =========================================================================
-// 2. RUN MACHINE ENGINE VIA INTERNAL SEQUENCE LATCH
-// =========================================================================
-IF bSequenceRunning THEN
+// Auto Sequence / Automaattinen sekvenssi
+// FIXED: Changed local variable to utilize global scoped tracking bit
+IF GVL_Motion.bSequenceRunning THEN
     bSequenceResetPulse := FALSE;
 
     // Check if there are still valid steps left to run in path array
+    // Tarkastetaan onko vielä askelia jäljellä
     IF GVL_Motion.iStepPointer <= GVL_Motion.iTotalSteps THEN
     
          CASE GVL_Motion.iSubPhase OF
-			 0: // Initialize sequence settings on first boot
-				tPneumaticDelay(IN := FALSE); 
+             0: 
+                tPneumaticDelay(IN := FALSE);
 				GVL_Motion.bExecuteMoveX := FALSE;
-				GVL_Motion.bExecuteMoveY := FALSE;
+                GVL_Motion.bExecuteMoveY := FALSE;
 
-    			GVL_Motion.iStepPointer := 1;
-    			GVL_Motion.bAutoseqDone := FALSE;
-
-   				GVL_Motion.iSubPhase := 2;
+                GVL_Motion.iSubPhase := 2;
             
-        2: // Safety Check: Pull X to home if not at home before changing Y position
+        2: // Pull X to home if not at home before changing Y position, this is to avoid possible collision
+            // Vedetään X kotiin ennen Y:tä, näin vältetään mahdolliset törmäykset
             IF GVL_Motion.fCurrentX > 0.05 THEN
                 GVL_Motion.fTargetX := 0.0;
                 GVL_Motion.fTargetY := GVL_Motion.fCurrentY; 
@@ -53,7 +57,8 @@ IF bSequenceRunning THEN
                 GVL_Motion.iSubPhase := 4; 
             END_IF
 
-            4: // Evaluate if the forks need to actuate for the current step
+            4: // Evaluate if the Z lifter needs to actuate for the current step
+                // Arvioidaan tarvitaanko Z lifterin asentoa vaihtaa
                 bOldZlifter := GVL_Motion.bZlifter;
 
                 IF NOT GVL_Motion.bRetrievalMode THEN
@@ -76,8 +81,9 @@ IF bSequenceRunning THEN
                     GVL_Motion.iSubPhase := 6; 
                 END_IF
                 
-            6: // 1.5 sec delay after Z moves to avoid unwanted disasters
-                tPneumaticDelay(IN := TRUE, PT := T#1500MS);
+            6: // 1 sec delay after Z moves to avoid unwanted disasters
+                // 1 sekuntin viive, jotta mahdolliset Z liikkeet ei tapahdu samanaikaisesti Y/X liikkeiten kanssa
+                tPneumaticDelay(IN := TRUE, PT := T#1000MS);
                 IF tPneumaticDelay.Q THEN 
                     tPneumaticDelay(IN := FALSE); 
                     GVL_Motion.iSubPhase := 8; 
@@ -85,6 +91,7 @@ IF bSequenceRunning THEN
                 
             8: 
                 // If the step is pulling back out to home, force X to move first to avoid collision
+                // Taas X liikkuu ensin, jotta vältetään mahdolliset törmäykset
                 IF GVL_Motion.astPath[GVL_Motion.iStepPointer].fTargetX = 0.0 THEN
                     IF ABS(GVL_Motion.fCurrentX - GVL_Motion.astPath[GVL_Motion.iStepPointer].fTargetX) > 0.05 THEN
                         GVL_Motion.fTargetX := GVL_Motion.astPath[GVL_Motion.iStepPointer].fTargetX; 
@@ -102,6 +109,7 @@ IF bSequenceRunning THEN
                     END_IF
                     
                 // Moving in to new shelves, Y moves first
+                // Kun siirrytään uuden hyllyn kohdalle Y tähdätään eka kohdalle
                 ELSE
                     IF ABS(GVL_Motion.fCurrentY - GVL_Motion.astPath[GVL_Motion.iStepPointer].fTargetY) > 0.05 THEN
                         GVL_Motion.fTargetX := GVL_Motion.fCurrentX; 
@@ -120,6 +128,7 @@ IF bSequenceRunning THEN
                 END_IF
                 
                 // Servo feedback check to verify moves done using central tracking bits
+                // Liikkeiten seuraus ja vahvistus servoilta 
                 IF GVL_Motion.iSubPhase = 8 
                     AND (NOT GVL_Motion.bExecuteMoveX OR (MAIN.XYZ.fbAutoMoveX.Done AND NOT MAIN.XYZ.fbAutoMoveX.Busy)) 
                     AND (NOT GVL_Motion.bExecuteMoveY OR (MAIN.XYZ.fbAutoMoveY.Done AND NOT MAIN.XYZ.fbAutoMoveY.Busy)) 
@@ -129,7 +138,7 @@ IF bSequenceRunning THEN
                     GVL_Motion.bExecuteMoveY := FALSE;
                     
                     IF GVL_Motion.iStepPointer = GVL_Motion.iTotalSteps THEN
-                        GVL_Motion.iSubPhase := 10; 
+                        GVL_Motion.iSubPhase := 9; 
                     ELSE
                         GVL_Motion.iStepPointer := GVL_Motion.iStepPointer + 1; 
                         
@@ -140,37 +149,55 @@ IF bSequenceRunning THEN
                         END_IF
                     END_IF
                 END_IF
+			
+			9:
+				GVL_Motion.bExecuteMoveX := FALSE;
+				GVL_Motion.bExecuteMoveY := FALSE;
+				
+				GVL_Motion.fTargetX := 0.0;
+                GVL_Motion.fTargetY := 0.0;
+
+                GVL_Motion.bExecuteMoveY := TRUE;
+				
+				GVL_Motion.iSubPhase	 := 10;
 
             10: // Return home
-                GVL_Motion.fTargetX := 0.0; 
-                GVL_Motion.fTargetY := 0.0;
-                GVL_Motion.bExecuteMoveX := FALSE; 
-                GVL_Motion.bExecuteMoveY := TRUE; 
-                
-                IF MAIN.XYZ.fbAutoMoveY.Done AND NOT MAIN.XYZ.fbAutoMoveY.Busy AND NOT MAIN.XYZ.fbAutoMoveX.Busy THEN
-                    GVL_Motion.bExecuteMoveY := FALSE; 
-                    GVL_Motion.bZlifter := NOT GVL_Motion.bRetrievalMode; 
-                    
-                    // --- SUCCESSFUL FINISH ---
-                    GVL_Motion.bAutoseqDone		:= TRUE;  // Retain completed status flag
-                    GVL_Motion.bSequenceRunning	:= FALSE; // Turn off our internal runner loop cleanly
-                    GVL_Motion.iStepPointer		:= 1; 
-                    GVL_Motion.iSubPhase		:= 0;
+                // Paluu kotiin        
+             	IF MAIN.XYZ.fbAutoMoveY.Busy THEN
+					GVL_Motion.bExecuteMoveY := FALSE;
+                END_IF
+   				IF ABS(GVL_Motion.fCurrentX) <= 0.05
+                    AND ABS(GVL_Motion.fCurrentY) <= 0.05
+                    AND NOT MAIN.XYZ.fbAutoMoveX.Busy
+                    AND NOT MAIN.XYZ.fbAutoMoveY.Busy THEN
+
+                    GVL_Motion.bExecuteMoveX := FALSE;
+                    GVL_Motion.bExecuteMoveY := FALSE;
+
+                    GVL_Motion.bZlifter := NOT GVL_Motion.bRetrievalMode;
+
+                    GVL_Motion.bAutoseqDone     := TRUE;
+                    GVL_Motion.bSequenceRunning := FALSE;
+                    GVL_Motion.bStartAutoseq    := FALSE;
+
+                    GVL_Motion.iStepPointer     := 1;
+                    GVL_Motion.iSubPhase        := 0;
                 END_IF
           END_CASE
     ELSE
-        GVL_Motion.bAutoseqDone := TRUE; 
-        bSequenceRunning         := FALSE; 
-        GVL_Motion.iStepPointer  := 1; 
-        GVL_Motion.iSubPhase     := 0;
+        GVL_Motion.bAutoseqDone     := TRUE; 
+        GVL_Motion.bSequenceRunning := FALSE;
+		GVL_Motion.bStartAutoseq    := FALSE;
+        GVL_Motion.iStepPointer     := 1; 
+        GVL_Motion.iSubPhase        := 0;
     END_IF
 ELSE
-    // Executed every cycle when the sequence is idle
     GVL_Motion.bExecuteMoveX := FALSE; 
     GVL_Motion.bExecuteMoveY := FALSE; 
     tPneumaticDelay(IN := FALSE);
     
-    // Explicit safety sweep: guarantees the variable is ALWAYS forced to false when idle
+    // Variable is ALWAYS forced to false when idle
+    // Idlenä aina FALSE
     GVL_Motion.bStartAutoseq := FALSE; 
     
     IF NOT GVL_Motion.bAutoseqDone THEN
@@ -181,16 +208,28 @@ ELSE
 END_IF]]></ST>
     </Implementation>
     <LineIds Name="AutoSequence">
-      <LineId Id="1518" Count="0" />
-      <LineId Id="1840" Count="15" />
-      <LineId Id="2002" Count="0" />
-      <LineId Id="2048" Count="0" />
-      <LineId Id="2061" Count="2" />
-      <LineId Id="2056" Count="2" />
-      <LineId Id="2060" Count="0" />
-      <LineId Id="2046" Count="0" />
-      <LineId Id="2018" Count="14" />
-      <LineId Id="1875" Count="126" />
+      <LineId Id="2081" Count="4" />
+      <LineId Id="2257" Count="0" />
+      <LineId Id="2260" Count="1" />
+      <LineId Id="2259" Count="0" />
+      <LineId Id="2258" Count="0" />
+      <LineId Id="2086" Count="0" />
+      <LineId Id="2256" Count="0" />
+      <LineId Id="2087" Count="13" />
+      <LineId Id="2264" Count="1" />
+      <LineId Id="2104" Count="111" />
+      <LineId Id="2279" Count="3" />
+      <LineId Id="2285" Count="0" />
+      <LineId Id="2287" Count="2" />
+      <LineId Id="2286" Count="0" />
+      <LineId Id="2290" Count="0" />
+      <LineId Id="2283" Count="0" />
+      <LineId Id="2216" Count="2" />
+      <LineId Id="2266" Count="0" />
+      <LineId Id="2291" Count="17" />
+      <LineId Id="2234" Count="4" />
+      <LineId Id="2263" Count="0" />
+      <LineId Id="2239" Count="16" />
       <LineId Id="1503" Count="0" />
     </LineIds>
   </POU>

@@ -20,6 +20,9 @@
     <Compile Include="DUTs\ST_MotionStep.TcDUT">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="GlobalTextList.TcGTLO">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="GVLs\GVL_Motion.TcGVL">
       <SubType>Code</SubType>
       <LinkAlways>true</LinkAlways>

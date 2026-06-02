@@ -6,15 +6,17 @@
 VAR_GLOBAL
 	// Author RL
 	// Hardware axis references
+	// Axis viittaukset
 	Axis1               : AXIS_REF;	// X
 	Axis2               : AXIS_REF;	// Y
 	
 	// Core system control
-	bEnableAll          : BOOL := TRUE;		// Enables the servo drives
-	bResetAll           : BOOL := FALSE;	// Resets possible servo errors
-	bManualModeActive   : BOOL := FALSE; 	// Enables manual driving
+	bEnableAll          : BOOL := TRUE;		// Enables the servo drives, aktivoi servot
+	bResetAll           : BOOL := FALSE;	// Resets possible servo errors, resetoi servo viat
+	bManualModeActive   : BOOL := FALSE; 	// Enables manual driving, aktivoi manualiajon
 	
 	// Homing inputs and status check after homing
+	// Kotiutus inputit ja tarkistus kotiutuksen jälkeen
 	bSensor_X           AT %I* : BOOL; 
 	bSensor_Y           AT %I* : BOOL;
 	bStartHoming        : BOOL := FALSE; 
@@ -22,13 +24,17 @@ VAR_GLOBAL
 	bYHomed             : BOOL := FALSE; 
 
 	// Live axis position
+	// Live axis asennot
 	fCurrentX           : LREAL := 0.0;
 	fCurrentY           : LREAL := 0.0;
 
 	// "Z Axis" not really but kinda acts as a Z axis, this is a pneumatic lifter that is sitting on the Y axis
+	// "Z Axis" Paineilma nostin Y akselin päällä
 	bZlifter            AT %Q* : BOOL;      // FALSE = Raised, TRUE = Lowered)
+	bZlifterManual		: BOOL;
 	
 	// Controls for manual driving, "Jogging"
+	// Manuaaliajon kontrollit
 	bJogForwardX        : BOOL := FALSE;    
 	bJogForwardY        : BOOL := FALSE;    
 	bJogBackwardsX      : BOOL := FALSE;    
@@ -37,12 +43,14 @@ VAR_GLOBAL
 	fVelocityY          : LREAL := 10.0;
 	
 	// These calculate if moving is allowed, based on current position
+	// Liikkumisen luvat, nykyisen sijainnin mukaan
 	bX_Allow_Positive   : BOOL := FALSE;
 	bX_Allow_Negative   : BOOL := FALSE;
 	bY_Allow_Positive   : BOOL := FALSE;
 	bY_Allow_Negative   : BOOL := FALSE;
 	
 	// States
+	// Z nostimen tilat
 	Z_IDLE          : INT := 0;
 	Z_UP            : INT := 1;
 	Z_DOWN          : INT := 2;
@@ -51,7 +59,7 @@ VAR_GLOBAL
 	bStartAutoseq     	: BOOL := FALSE;
 	bAutoseqDone     	: BOOL := FALSE;
 	bSequenceRunning	: BOOL;
-	bRetrievalMode    	: BOOL := FALSE;  // FALSE = Put away pallets, TRUE = Take away pallets
+	bRetrievalMode    	: BOOL := FALSE;  // FALSE = Put away pallets, TRUE = Take away pallets / Autosekvenssin Z lifter käänteiset tilat
 	
 	bExecuteMoveX    : BOOL;
     bExecuteMoveY    : BOOL;
@@ -66,6 +74,7 @@ VAR_GLOBAL
 	
 	// This array system holds inside coordinates for the automatic sequence driving
 	// NOTE: Actions of the pneumatic lift are reversed when bRetrievalMode = TRUE
+	// Automaattisen sekvenssin koordinaatit
 	astPath : ARRAY[1..9] OF ST_MotionStep := [
 		// "Shelf 1" cycle
 		

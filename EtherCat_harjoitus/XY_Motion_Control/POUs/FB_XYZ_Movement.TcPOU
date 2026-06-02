@@ -37,18 +37,21 @@ VAR
 END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[// Safety first, position reference form axis
+// Paikan haku
 fActPosX	:= Axis1.NcToPlc.ActPos;
 fActPosY	:= Axis2.NcToPlc.ActPos;
 THIS^.M_UpdateSafety();
 
 // Axis Power, directional enables based on position
+// Axis teho, luvat liike suunnille sijainnin perusteella
+// X Axis 1
 fbPower1(
     Axis            := Axis1, 
     Enable          := GVL_Motion.bEnableAll, 
     Enable_Positive := GVL_Motion.bEnableAll AND GVL_Motion.bX_Allow_Positive, 
     Enable_Negative := GVL_Motion.bEnableAll AND GVL_Motion.bX_Allow_Negative
 );
-
+// Y Axis 2
 fbPower2(
     Axis            := Axis2, 
     Enable          := GVL_Motion.bEnableAll, 
@@ -57,6 +60,7 @@ fbPower2(
 );
 
 // NC Kernel Error Resets
+// Axis error resetit
 fbReset1(
 	Axis := Axis1,
 	Execute := GVL_Motion.bResetAll);
@@ -70,6 +74,8 @@ IF GVL_Motion.bResetAll THEN
 END_IF
 
 // Automated sequence, axis ref and enables, edit velocity if needed
+// Automaattisen sekvenssin, axis viittaus ja luvat, tästä voi muutta automaattisen sekvenssin nopeutta halutessa
+// Jos nopeutta on liikaa servo menee error tilaan (Set point karkaa liian kauas)
 fbAutoMoveX(
     Axis     := Axis1, 
     Execute  := GVL_Motion.bExecuteMoveX AND NOT GVL_Motion.bManualModeActive, 
@@ -86,6 +92,7 @@ fbAutoMoveY(
 
 
 // Manual control, axis ref and enables
+// Manuaali ajon axis viittaus, luvat
 fbJogX(
     Axis         := Axis1,
     JogForward   := GVL_Motion.bJogForwardX AND GVL_Motion.bX_Allow_Positive AND GVL_Motion.bManualModeActive AND NOT GVL_Motion.bStartAutoseq,
@@ -103,6 +110,7 @@ fbJogY(
 );
 
 // Safety reset to turn off manual jogging if switched away from manual mode
+// Manualiset liike komennot lakkaa, jos vaihdetaan kesken kaiken pois manuaali tilasta
 IF NOT GVL_Motion.bManualModeActive THEN
     fbJogX(
 		Axis := Axis1,
@@ -116,6 +124,7 @@ IF NOT GVL_Motion.bManualModeActive THEN
 END_IF
 
 // Homing
+// Kotiutus
 fbDriveToSensorX(
 	Axis := Axis1,
 	Execute := GVL_Motion.bStartHoming,
@@ -147,6 +156,7 @@ fbLockZeroY(
 	Position := 0.0);
 
 // Homing indication
+// Kotiutuksen indikointi
 IF fbLockZeroX.Done THEN 
     GVL_Motion.bXHomed := TRUE;
 END_IF
@@ -156,11 +166,13 @@ IF fbLockZeroY.Done THEN
 END_IF
 
 // Reset Homing when done
+// Resetoidaan kotiutus kun se on valmis
 IF GVL_Motion.bXHomed AND GVL_Motion.bYHomed THEN
     GVL_Motion.bStartHoming := FALSE;
 END_IF
 
 // Reset homing executions, so that homing can be done again if needed
+// Resetoidaan kotiutus, jos tarvitaan uudestaan kotiuttaa
 IF NOT GVL_Motion.bStartHoming THEN
     fbDriveToSensorX(
 		Axis := Axis1,
@@ -196,6 +208,7 @@ END_VAR
       <Implementation>
         <ST><![CDATA[//Author RL
 // System position
+// Systeemin sijainti
 GVL_Motion.fCurrentX := fActPosX;
 GVL_Motion.fCurrentY := fActPosY;
 
@@ -205,25 +218,32 @@ END_IF
 
 IF GVL_Motion.bStartHoming THEN
     // During homing all movement is allowed
+	// Kotiutuksen aikana kaikki liikesuunnan sallittu
     GVL_Motion.bX_Allow_Negative := TRUE; 
     GVL_Motion.bX_Allow_Positive := TRUE;
     GVL_Motion.bY_Allow_Negative := TRUE; 
     GVL_Motion.bY_Allow_Positive := TRUE;
+END_IF
 	
-ELSIF GVL_Motion.bManualModeActive THEN
+IF GVL_Motion.bManualModeActive THEN
 	// Different safety limits for manual driving, this is to prevent hitting the shelves with forks in manual mode.
 	// These are editable from here, but not recommended to ensure safe operation
+	// Manuaaliajolla eri turvarajat, voi muutta, mutta ei suositeltu
 	GVL_Motion.bX_Allow_Negative := (GVL_Motion.fCurrentX > -0.1);
-    GVL_Motion.bX_Allow_Positive := (GVL_Motion.fCurrentX < 5.820);	// Note X is allowed to travell less in manual to protect possible forks
+    GVL_Motion.bX_Allow_Positive := (GVL_Motion.fCurrentX < 5.820);	// Note X is allowed to travell less in manual to protect possible forks/ Z lifter
                                        
     GVL_Motion.bY_Allow_Negative := (GVL_Motion.fCurrentY > -34.0);
    	GVL_Motion.bY_Allow_Positive := (GVL_Motion.fCurrentY < 0.0);
+	
+	GVL_Motion.bZlifter := GVL_Motion.bZlifterManual;	// Manual control for Z lifter, manuaaliset kontrollit Z lifterille
+END_IF
 
-ELSE
+IF GVL_Motion.bSequenceRunning THEN
 	// Safety limits for automatic sequence
 	// These same values are also in the AXIS settings under parameter - limit switches
 	// These values are safe operation boundaries so that we dont crash the lifter/forks in to the shelves
 	// If you wish to edit these, go under Axis -> Parameters -> Limit switches
+	// Auto sekvenssin turvarajat, nämä on myös asetettu suoraan molempiin Axiksiin niiden asetuksista
     GVL_Motion.bX_Allow_Negative := (GVL_Motion.fCurrentX > -0.1);
     GVL_Motion.bX_Allow_Positive := (GVL_Motion.fCurrentX < 9.9);
                                         
@@ -234,20 +254,34 @@ END_IF]]></ST>
     </Method>
     <LineIds Name="FB_XYZ_Movement">
       <LineId Id="502" Count="0" />
+      <LineId Id="725" Count="0" />
       <LineId Id="689" Count="1" />
-      <LineId Id="503" Count="18" />
+      <LineId Id="503" Count="2" />
+      <LineId Id="724" Count="0" />
+      <LineId Id="726" Count="0" />
+      <LineId Id="506" Count="14" />
+      <LineId Id="727" Count="0" />
+      <LineId Id="521" Count="0" />
       <LineId Id="628" Count="0" />
       <LineId Id="627" Count="0" />
       <LineId Id="630" Count="0" />
       <LineId Id="522" Count="0" />
       <LineId Id="631" Count="1" />
       <LineId Id="523" Count="3" />
-      <LineId Id="530" Count="36" />
+      <LineId Id="530" Count="1" />
+      <LineId Id="728" Count="1" />
+      <LineId Id="532" Count="15" />
+      <LineId Id="730" Count="0" />
+      <LineId Id="548" Count="16" />
+      <LineId Id="731" Count="0" />
+      <LineId Id="565" Count="1" />
       <LineId Id="633" Count="3" />
       <LineId Id="567" Count="0" />
       <LineId Id="637" Count="2" />
       <LineId Id="568" Count="0" />
-      <LineId Id="570" Count="2" />
+      <LineId Id="570" Count="1" />
+      <LineId Id="732" Count="0" />
+      <LineId Id="572" Count="0" />
       <LineId Id="640" Count="4" />
       <LineId Id="573" Count="0" />
       <LineId Id="645" Count="2" />
@@ -259,7 +293,13 @@ END_IF]]></ST>
       <LineId Id="656" Count="2" />
       <LineId Id="578" Count="0" />
       <LineId Id="659" Count="2" />
-      <LineId Id="579" Count="17" />
+      <LineId Id="579" Count="1" />
+      <LineId Id="733" Count="0" />
+      <LineId Id="581" Count="8" />
+      <LineId Id="734" Count="0" />
+      <LineId Id="590" Count="4" />
+      <LineId Id="735" Count="0" />
+      <LineId Id="595" Count="1" />
       <LineId Id="662" Count="2" />
       <LineId Id="597" Count="0" />
       <LineId Id="665" Count="2" />
@@ -276,20 +316,30 @@ END_IF]]></ST>
     </LineIds>
     <LineIds Name="FB_XYZ_Movement.M_UpdateSafety">
       <LineId Id="52" Count="0" />
-      <LineId Id="34" Count="2" />
+      <LineId Id="34" Count="0" />
+      <LineId Id="97" Count="0" />
+      <LineId Id="35" Count="1" />
       <LineId Id="90" Count="2" />
       <LineId Id="89" Count="0" />
-      <LineId Id="37" Count="6" />
+      <LineId Id="37" Count="2" />
+      <LineId Id="98" Count="0" />
+      <LineId Id="40" Count="3" />
+      <LineId Id="107" Count="0" />
       <LineId Id="69" Count="0" />
       <LineId Id="44" Count="0" />
       <LineId Id="78" Count="0" />
       <LineId Id="84" Count="0" />
+      <LineId Id="99" Count="0" />
       <LineId Id="79" Count="3" />
       <LineId Id="50" Count="0" />
+      <LineId Id="101" Count="1" />
       <LineId Id="62" Count="0" />
+      <LineId Id="108" Count="0" />
       <LineId Id="54" Count="0" />
       <LineId Id="83" Count="0" />
-      <LineId Id="71" Count="6" />
+      <LineId Id="71" Count="2" />
+      <LineId Id="100" Count="0" />
+      <LineId Id="74" Count="3" />
       <LineId Id="70" Count="0" />
       <LineId Id="56" Count="0" />
     </LineIds>
