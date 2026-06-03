@@ -1,0 +1,33 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <DUT Name="E_AutoSeqState" Id="{b8224aba-9e65-4fa2-9ea0-032b7e7e380b}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+{attribute 'strict'}
+// Moves for the auto sequence
+// Auto sekvenssin liikkeet
+TYPE E_AutoSeqState :
+(
+	INIT,
+    MOVE_X_SAFE_HOME,
+	WAIT_X_SAFE_HOME,
+
+    SET_Z_POSITION,
+    WAIT_Z_DELAY,
+
+    DECIDE_MOVE_ORDER,
+	MOVE_Y,
+    WAIT_Y,
+
+    MOVE_X,
+    WAIT_X,
+
+    NEXT_STEP,
+
+    PREPARE_RETURN_HOME,
+    RETURN_HOME
+
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

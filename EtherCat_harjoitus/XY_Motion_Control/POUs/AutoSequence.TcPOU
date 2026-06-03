@@ -1,7 +1,8 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
   <POU Name="AutoSequence" Id="{66be7a83-b643-4cf9-8506-a45e5e049ccf}" SpecialFunc="None">
-    <Declaration><![CDATA[PROGRAM AutoSequence
+    <Declaration><![CDATA[// Author RL
+PROGRAM AutoSequence
 VAR
     bSequenceResetPulse : BOOL;
     tPneumaticDelay     : TON;
@@ -11,20 +12,19 @@ END_VAR]]></Declaration>
     <Implementation>
       <ST><![CDATA[// Author RL
 IF GVL_Motion.bStartAutoseq AND GVL_Motion.bXHomed AND GVL_Motion.bYHomed AND NOT GVL_Motion.bSequenceRunning THEN
-    GVL_Motion.bStartAutoseq    := FALSE; // Laittaa HMI nappulan FALSE
-    GVL_Motion.bSequenceRunning := TRUE;  // FIXED: Ensure this variable matches below
-    GVL_Motion.bAutoseqDone     := FALSE;
+    GVL_Motion.bStartAutoseq    := FALSE; // Switches HMI button to FALSE, Laittaa HMI nappulan FALSE
+    GVL_Motion.bSequenceRunning := TRUE;  // True while sequence running, TRUE kun sekvenssi käynnissä
+    GVL_Motion.bAutoseqDone     := FALSE; // FALSE while sequence active, FALSE kun sekvenssi käynnissä
 	
-	GVL_Motion.iStepPointer     := 1;     // Forces pointer sync on cycle 0
-    GVL_Motion.bExecuteMoveX    := FALSE; // Wipes old move triggers
-    GVL_Motion.bExecuteMoveY    := FALSE; // Wipes old move triggers
+	GVL_Motion.iStepPointer     := 1;     
+    GVL_Motion.bExecuteMoveX    := FALSE; // Wipes old move triggers, pyyhkii vanhat executet
+    GVL_Motion.bExecuteMoveY    := FALSE; // Wipes old move triggers, pyyhkii vanhat executet
 	
-    GVL_Motion.iSubPhase        := 0;
+    GVL_Motion.eSubPhase		:= E_AutoSeqState.INIT;
 	
 END_IF
 
 // Auto Sequence / Automaattinen sekvenssi
-// FIXED: Changed local variable to utilize global scoped tracking bit
 IF GVL_Motion.bSequenceRunning THEN
     bSequenceResetPulse := FALSE;
 
@@ -32,125 +32,169 @@ IF GVL_Motion.bSequenceRunning THEN
     // Tarkastetaan onko vielä askelia jäljellä
     IF GVL_Motion.iStepPointer <= GVL_Motion.iTotalSteps THEN
     
-         CASE GVL_Motion.iSubPhase OF
-             0: 
+         CASE GVL_Motion.eSubPhase OF
+			// Init
+             E_AutoSeqState.INIT:
+			 
                 tPneumaticDelay(IN := FALSE);
 				GVL_Motion.bExecuteMoveX := FALSE;
                 GVL_Motion.bExecuteMoveY := FALSE;
 
-                GVL_Motion.iSubPhase := 2;
-            
-        2: // Pull X to home if not at home before changing Y position, this is to avoid possible collision
-            // Vedetään X kotiin ennen Y:tä, näin vältetään mahdolliset törmäykset
-            IF GVL_Motion.fCurrentX > 0.05 THEN
-                GVL_Motion.fTargetX := 0.0;
-                GVL_Motion.fTargetY := GVL_Motion.fCurrentY; 
-                GVL_Motion.bExecuteMoveX := TRUE;
-                GVL_Motion.bExecuteMoveY := FALSE;
-                
-                IF MAIN.XYZ.fbAutoMoveX.Done AND NOT MAIN.XYZ.fbAutoMoveX.Busy AND NOT MAIN.XYZ.fbAutoMoveY.Busy THEN
-                    GVL_Motion.bExecuteMoveX := FALSE;
-                    GVL_Motion.iSubPhase := 4; 
+             GVL_Motion.eSubPhase := E_AutoSeqState.MOVE_X_SAFE_HOME;
+	
+		// Pull X to home if not at home before changing Y position, this is to avoid possible collision
+        // Vedetään X kotiin ennen Y:tä, näin vältetään mahdolliset törmäykset
+        E_AutoSeqState.MOVE_X_SAFE_HOME:
+	
+			GVL_Motion.fTargetX := 0.0;
+			GVL_motion.bExecuteMoveX := TRUE;
+			
+			GVL_Motion.eSubPhase := E_AutoSeqState.WAIT_X_SAFE_HOME;
+        
+		// Wait for X to move home before starting the sequence if X is not at home
+		// Odotetaan että X liikkuu kotiin ennen aloitusta
+		E_AutoSeqState.WAIT_X_SAFE_HOME:
+		
+			GVL_Motion.bExecuteMoveX := FALSE;
+			
+			IF ABS(GVL_Motion.fCurrentX) <= 0.05 AND NOT MAIN.XYZ.fbAutoMoveX.Busy THEN
+				GVL_Motion.eSubPhase := E_AutoSeqState.SET_Z_POSITION;
+			END_IF
+		// Evaluate if the Z lifter needs to actuate for the current step
+        // Arvioidaan tarvitaanko Z lifterin asentoa vaihtaa
+        E_AutoSeqState.SET_Z_POSITION:
+			
+			bOldZlifter := GVL_Motion.bZlifter;
+			
+			// Different modes lifting and lowering
+			// Eri modet nosto ja lasku
+            IF NOT GVL_Motion.bRetrievalMode THEN
+				IF GVL_Motion.astPath[GVL_Motion.iStepPointer].nZAction = GVL_Motion.Z_UP THEN
+					GVL_Motion.bZlifter := FALSE; 
+                ELSIF GVL_Motion.astPath[GVL_Motion.iStepPointer].nZAction = GVL_Motion.Z_DOWN THEN
+                    GVL_Motion.bZlifter := TRUE; 
                 END_IF
-            ELSE
-                GVL_Motion.bExecuteMoveX := FALSE;
-                GVL_Motion.iSubPhase := 4; 
+                ELSE
+                    IF GVL_Motion.astPath[GVL_Motion.iStepPointer].nZAction = GVL_Motion.Z_UP THEN
+                        GVL_Motion.bZlifter := TRUE; 
+                    ELSIF GVL_Motion.astPath[GVL_Motion.iStepPointer].nZAction = GVL_Motion.Z_DOWN THEN
+                        GVL_Motion.bZlifter := FALSE; 
+                    END_IF
             END_IF
-
-            4: // Evaluate if the Z lifter needs to actuate for the current step
-                // Arvioidaan tarvitaanko Z lifterin asentoa vaihtaa
-                bOldZlifter := GVL_Motion.bZlifter;
-
-                IF NOT GVL_Motion.bRetrievalMode THEN
-                    IF GVL_Motion.astPath[GVL_Motion.iStepPointer].nZAction = GVL_Motion.Z_UP THEN
-                        GVL_Motion.bZlifter := FALSE; 
-                    ELSIF GVL_Motion.astPath[GVL_Motion.iStepPointer].nZAction = GVL_Motion.Z_DOWN THEN
-                        GVL_Motion.bZlifter := TRUE; 
-                    END_IF
-                ELSE
-                    IF GVL_Motion.astPath[GVL_Motion.iStepPointer].nZAction = GVL_Motion.Z_UP THEN
-                        GVL_Motion.bZlifter := TRUE; 
-                    ELSIF GVL_Motion.astPath[GVL_Motion.iStepPointer].nZAction = GVL_Motion.Z_DOWN THEN
-                        GVL_Motion.bZlifter := FALSE; 
-                    END_IF
-                END_IF
                 
-                IF GVL_Motion.bZlifter = bOldZlifter THEN
-                    GVL_Motion.iSubPhase := 8; 
+            IF GVL_Motion.bZlifter = bOldZlifter THEN
+                    GVL_Motion.eSubPhase := E_AutoSeqState.DECIDE_MOVE_ORDER; 
                 ELSE
-                    GVL_Motion.iSubPhase := 6; 
-                END_IF
-                
-            6: // 1 sec delay after Z moves to avoid unwanted disasters
-                // 1 sekuntin viive, jotta mahdolliset Z liikkeet ei tapahdu samanaikaisesti Y/X liikkeiten kanssa
+                    GVL_Motion.eSubPhase := E_AutoSeqState.WAIT_Z_DELAY; 
+            END_IF
+            
+			// 1 sec delay after Z moves to avoid unwanted disasters
+            // 1 sekuntin viive, jotta Z liikkeet ei tapahdu samanaikaisesti Y/X liikkeiten kanssa 
+            E_AutoSeqState.WAIT_Z_DELAY:
+			
                 tPneumaticDelay(IN := TRUE, PT := T#1000MS);
+				
                 IF tPneumaticDelay.Q THEN 
                     tPneumaticDelay(IN := FALSE); 
-                    GVL_Motion.iSubPhase := 8; 
+                    GVL_Motion.eSubPhase := E_AutoSeqState.DECIDE_MOVE_ORDER; 
                 END_IF
-                
-            8: 
-                // If the step is pulling back out to home, force X to move first to avoid collision
-                // Taas X liikkuu ensin, jotta vältetään mahdolliset törmäykset
+				
+            // Decide which moves to make next
+            // Tulevien liikkeiten valinta
+			E_AutoSeqState.DECIDE_MOVE_ORDER:
+			
+				GVL_Motion.bExecuteMoveX	:= FALSE;
+				GVL_Motion.bExecuteMoveY	:= FALSE;
+				
                 IF GVL_Motion.astPath[GVL_Motion.iStepPointer].fTargetX = 0.0 THEN
+					
                     IF ABS(GVL_Motion.fCurrentX - GVL_Motion.astPath[GVL_Motion.iStepPointer].fTargetX) > 0.05 THEN
                         GVL_Motion.fTargetX := GVL_Motion.astPath[GVL_Motion.iStepPointer].fTargetX; 
                         GVL_Motion.fTargetY := GVL_Motion.fCurrentY; 
-                        GVL_Motion.bExecuteMoveX := TRUE; 
-                        GVL_Motion.bExecuteMoveY := FALSE; 
-                    ELSIF NOT MAIN.XYZ.fbAutoMoveX.Busy THEN 
-                        GVL_Motion.fTargetX := GVL_Motion.fCurrentX; 
-                        GVL_Motion.fTargetY := GVL_Motion.astPath[GVL_Motion.iStepPointer].fTargetY;
-                        GVL_Motion.bExecuteMoveX := FALSE; 
-                        GVL_Motion.bExecuteMoveY := TRUE;
-                    ELSE
-                        GVL_Motion.bExecuteMoveX := FALSE;
-                        GVL_Motion.bExecuteMoveY := FALSE;
-                    END_IF
-                    
-                // Moving in to new shelves, Y moves first
-                // Kun siirrytään uuden hyllyn kohdalle Y tähdätään eka kohdalle
-                ELSE
-                    IF ABS(GVL_Motion.fCurrentY - GVL_Motion.astPath[GVL_Motion.iStepPointer].fTargetY) > 0.05 THEN
-                        GVL_Motion.fTargetX := GVL_Motion.fCurrentX; 
-                        GVL_Motion.fTargetY := GVL_Motion.astPath[GVL_Motion.iStepPointer].fTargetY;
-                        GVL_Motion.bExecuteMoveX := FALSE; 
-                        GVL_Motion.bExecuteMoveY := TRUE;
-                    ELSIF NOT MAIN.XYZ.fbAutoMoveY.Busy THEN 
-                        GVL_Motion.fTargetX := GVL_Motion.astPath[GVL_Motion.iStepPointer].fTargetX; 
-                        GVL_Motion.fTargetY := GVL_Motion.fCurrentY;
-                        GVL_Motion.bExecuteMoveX := TRUE; 
-                        GVL_Motion.bExecuteMoveY := FALSE; 
-                    ELSE
-                        GVL_Motion.bExecuteMoveX := FALSE;
-                        GVL_Motion.bExecuteMoveY := FALSE;
-                    END_IF
-                END_IF
-                
-                // Servo feedback check to verify moves done using central tracking bits
-                // Liikkeiten seuraus ja vahvistus servoilta 
-                IF GVL_Motion.iSubPhase = 8 
-                    AND (NOT GVL_Motion.bExecuteMoveX OR (MAIN.XYZ.fbAutoMoveX.Done AND NOT MAIN.XYZ.fbAutoMoveX.Busy)) 
-                    AND (NOT GVL_Motion.bExecuteMoveY OR (MAIN.XYZ.fbAutoMoveY.Done AND NOT MAIN.XYZ.fbAutoMoveY.Busy)) 
-                    AND NOT MAIN.XYZ.fbAutoMoveX.Busy AND NOT MAIN.XYZ.fbAutoMoveY.Busy THEN
-                    
-                    GVL_Motion.bExecuteMoveX := FALSE; 
-                    GVL_Motion.bExecuteMoveY := FALSE;
-                    
-                    IF GVL_Motion.iStepPointer = GVL_Motion.iTotalSteps THEN
-                        GVL_Motion.iSubPhase := 9; 
-                    ELSE
-                        GVL_Motion.iStepPointer := GVL_Motion.iStepPointer + 1; 
+                        GVL_Motion.bExecuteMoveX := TRUE;
+						GVL_Motion.eSubPhase := E_AutoSeqState.WAIT_X;
+					ELSE
+						GVL_Motion.eSubPhase := E_AutoSeqState.MOVE_Y;
+					END_IF
                         
-                        IF GVL_Motion.astPath[GVL_Motion.iStepPointer].nZAction = 0 THEN
-                            GVL_Motion.iSubPhase := 8;
-                        ELSE
-                            GVL_Motion.iSubPhase := 4;
-                        END_IF
-                    END_IF
-                END_IF
+                    ELSE
+						IF ABS(GVL_Motion.fCurrentY - GVL_motion.astPath[GVL_Motion.iStepPointer].fTargetY) > 0.05 THEN
+							GVL_motion.eSubPhase := E_AutoSeqState.MOVE_Y;
+						ELSE
+							GVL_Motion.eSubPhase := E_AutoSeqState.MOVE_X;
+						END_IF
+				END_IF
+				
+			// Set targets and move Y
+			// Asetetaan kohde ja liikutetaan Y	
+			E_AutoSeqState.MOVE_Y:
+				
+				GVL_Motion.fTargetX := GVL_Motion.fCurrentX; 
+                GVL_Motion.fTargetY := GVL_Motion.astPath[GVL_Motion.iStepPointer].fTargetY;
+                GVL_Motion.bExecuteMoveX := FALSE; 
+                GVL_Motion.bExecuteMoveY := TRUE;
+						
+			GVL_Motion.eSubPhase := E_AutoSeqState.WAIT_Y;
 			
-			9:
+			// Wait for Y to be done with moving before moving X
+			// Odotetaan kunnes Y on valmis ennen kuin liikutetaan X
+			E_AutoSeqState.WAIT_Y:
+				
+				IF ABS(GVL_Motion.fCurrentY - GVL_Motion.astPath[GVL_Motion.iStepPointer].fTargetY) <= 0.05 AND NOT MAIN.XYZ.fbAutoMoveY.Busy THEN
+					GVL_Motion.bExecuteMoveY := FALSE;
+							
+					IF GVL_Motion.astPath[GVL_Motion.iStepPointer].fTargetX = 0.0 THEN
+						GVL_Motion.eSubPhase := E_AutoSeqState.NEXT_STEP;
+						ELSE
+							GVL_Motion.eSubPhase := E_AutoSeqState.MOVE_X;
+					END_IF
+				END_IF
+				
+			// Set targets and move X
+			// Asetetaan kohde ja liikutetaan X			
+			E_AutoSeqState.MOVE_X :
+				
+                GVL_Motion.fTargetX := GVL_Motion.astPath[GVL_Motion.iStepPointer].fTargetX; 
+                GVL_Motion.fTargetY := GVL_Motion.fCurrentY;
+                GVL_Motion.bExecuteMoveX := TRUE; 
+                GVL_Motion.bExecuteMoveY := FALSE;
+						
+			GVL_Motion.eSubPhase := E_AutoSeqState.WAIT_X;
+			
+			// Wait for X to be done with moving before moving Y
+			// Odotetaan kunnes X on valmis ennen kuin liikutetaan Y		
+			E_AutoSeqState.WAIT_X:
+				
+				IF ABS(GVL_Motion.fCurrentX - GVL_Motion.astPath[GVL_Motion.iStepPointer].fTargetX) <= 0.05 AND NOT MAIN.XYZ.fbAutoMoveX.Busy THEN
+					GVL_Motion.bExecuteMoveX := FALSE;
+							
+					IF GVL_motion.astPath[GVL_Motion.iStepPointer].fTargetX = 0.0 THEN
+						GVL_Motion.eSubPhase := E_AutoSeqState.MOVE_Y;
+						ELSE
+							GVL_Motion.eSubPhase := E_AutoSeqState.NEXT_STEP;
+					END_IF
+				END_IF
+			
+			//Both axes in position evaluate where to go next
+			// Molemmat axes oikeissa paikoissa arvioi mihin mennään seuraavaksi			
+			E_AutoSeqState.NEXT_STEP:
+				
+				IF GVL_Motion.iStepPointer = GVL_motion.iTotalSteps THEN
+					GVL_Motion.eSubPhase := E_AutoSeqState.PREPARE_RETURN_HOME;
+				ELSE
+					GVL_Motion.iStepPointer := GVL_Motion.iStepPointer +1;
+							
+					IF  GVL_Motion.astPath[GVL_Motion.iStepPointer].nZaction = 0 THEN
+						GVL_Motion.eSubPhase := E_AutoSeqState.DECIDE_MOVE_ORDER;
+					ELSE
+						GVL_Motion.eSubPhase := E_AutoSeqState.SET_Z_POSITION;
+					END_IF
+				END_IF
+			
+			// Prepare returning to home after finishing sequence
+			// Valmistellaan kotiin paluu kun sekvenssi on valmis
+			E_AutoSeqState.PREPARE_RETURN_HOME:
+			
 				GVL_Motion.bExecuteMoveX := FALSE;
 				GVL_Motion.bExecuteMoveY := FALSE;
 				
@@ -159,13 +203,16 @@ IF GVL_Motion.bSequenceRunning THEN
 
                 GVL_Motion.bExecuteMoveY := TRUE;
 				
-				GVL_Motion.iSubPhase	 := 10;
-
-            10: // Return home
-                // Paluu kotiin        
+			GVL_Motion.eSubPhase	 := E_AutoSeqState.RETURN_HOME;
+			
+			// Return home
+			// Paluu kotiin 
+            E_AutoSeqState.RETURN_HOME:
+                       
              	IF MAIN.XYZ.fbAutoMoveY.Busy THEN
 					GVL_Motion.bExecuteMoveY := FALSE;
                 END_IF
+				
    				IF ABS(GVL_Motion.fCurrentX) <= 0.05
                     AND ABS(GVL_Motion.fCurrentY) <= 0.05
                     AND NOT MAIN.XYZ.fbAutoMoveX.Busy
@@ -181,15 +228,11 @@ IF GVL_Motion.bSequenceRunning THEN
                     GVL_Motion.bStartAutoseq    := FALSE;
 
                     GVL_Motion.iStepPointer     := 1;
-                    GVL_Motion.iSubPhase        := 0;
+                    GVL_Motion.eSubPhase        := E_AutoSeqState.INIT;
                 END_IF
+				ELSE
+    				GVL_Motion.eSubPhase := E_AutoSeqState.INIT;
           END_CASE
-    ELSE
-        GVL_Motion.bAutoseqDone     := TRUE; 
-        GVL_Motion.bSequenceRunning := FALSE;
-		GVL_Motion.bStartAutoseq    := FALSE;
-        GVL_Motion.iStepPointer     := 1; 
-        GVL_Motion.iSubPhase        := 0;
     END_IF
 ELSE
     GVL_Motion.bExecuteMoveX := FALSE; 
@@ -215,21 +258,112 @@ END_IF]]></ST>
       <LineId Id="2258" Count="0" />
       <LineId Id="2086" Count="0" />
       <LineId Id="2256" Count="0" />
-      <LineId Id="2087" Count="13" />
+      <LineId Id="2087" Count="2" />
+      <LineId Id="2091" Count="7" />
+      <LineId Id="2316" Count="0" />
+      <LineId Id="2099" Count="0" />
+      <LineId Id="2320" Count="0" />
+      <LineId Id="2100" Count="0" />
       <LineId Id="2264" Count="1" />
-      <LineId Id="2104" Count="111" />
-      <LineId Id="2279" Count="3" />
+      <LineId Id="2104" Count="1" />
+      <LineId Id="2318" Count="0" />
+      <LineId Id="2434" Count="1" />
+      <LineId Id="2107" Count="0" />
+      <LineId Id="2436" Count="0" />
+      <LineId Id="2319" Count="0" />
+      <LineId Id="2421" Count="2" />
+      <LineId Id="2109" Count="0" />
+      <LineId Id="2438" Count="1" />
+      <LineId Id="2425" Count="0" />
+      <LineId Id="2437" Count="0" />
+      <LineId Id="2426" Count="0" />
+      <LineId Id="2444" Count="0" />
+      <LineId Id="2428" Count="0" />
+      <LineId Id="2430" Count="0" />
+      <LineId Id="2429" Count="0" />
+      <LineId Id="2323" Count="0" />
+      <LineId Id="2440" Count="0" />
+      <LineId Id="2124" Count="0" />
+      <LineId Id="2441" Count="2" />
+      <LineId Id="2447" Count="1" />
+      <LineId Id="2128" Count="0" />
+      <LineId Id="2445" Count="1" />
+      <LineId Id="2131" Count="16" />
+      <LineId Id="2449" Count="1" />
+      <LineId Id="2148" Count="0" />
+      <LineId Id="2451" Count="0" />
+      <LineId Id="2150" Count="0" />
+      <LineId Id="2452" Count="0" />
+      <LineId Id="2151" Count="3" />
+      <LineId Id="2454" Count="0" />
+      <LineId Id="2155" Count="0" />
+      <LineId Id="2453" Count="0" />
+      <LineId Id="2328" Count="0" />
+      <LineId Id="2327" Count="0" />
+      <LineId Id="2339" Count="2" />
+      <LineId Id="2159" Count="0" />
+      <LineId Id="2338" Count="0" />
+      <LineId Id="2160" Count="3" />
+      <LineId Id="2342" Count="3" />
+      <LineId Id="2164" Count="1" />
+      <LineId Id="2346" Count="0" />
+      <LineId Id="2348" Count="5" />
+      <LineId Id="2455" Count="0" />
+      <LineId Id="2458" Count="0" />
+      <LineId Id="2356" Count="1" />
+      <LineId Id="2359" Count="2" />
+      <LineId Id="2358" Count="0" />
+      <LineId Id="2363" Count="1" />
+      <LineId Id="2368" Count="0" />
+      <LineId Id="2459" Count="1" />
+      <LineId Id="2367" Count="0" />
+      <LineId Id="2369" Count="0" />
+      <LineId Id="2411" Count="0" />
+      <LineId Id="2371" Count="0" />
+      <LineId Id="2373" Count="2" />
+      <LineId Id="2377" Count="1" />
+      <LineId Id="2376" Count="0" />
+      <LineId Id="2372" Count="0" />
+      <LineId Id="2461" Count="0" />
+      <LineId Id="2379" Count="0" />
+      <LineId Id="2462" Count="0" />
+      <LineId Id="2366" Count="0" />
+      <LineId Id="2355" Count="0" />
+      <LineId Id="2166" Count="3" />
+      <LineId Id="2380" Count="2" />
+      <LineId Id="2463" Count="1" />
+      <LineId Id="2383" Count="3" />
+      <LineId Id="2388" Count="2" />
+      <LineId Id="2393" Count="1" />
+      <LineId Id="2391" Count="0" />
+      <LineId Id="2387" Count="0" />
+      <LineId Id="2396" Count="0" />
+      <LineId Id="2465" Count="1" />
+      <LineId Id="2397" Count="3" />
+      <LineId Id="2402" Count="6" />
+      <LineId Id="2401" Count="0" />
+      <LineId Id="2410" Count="0" />
+      <LineId Id="2279" Count="0" />
+      <LineId Id="2467" Count="1" />
+      <LineId Id="2280" Count="0" />
+      <LineId Id="2456" Count="0" />
+      <LineId Id="2281" Count="1" />
       <LineId Id="2285" Count="0" />
       <LineId Id="2287" Count="2" />
       <LineId Id="2286" Count="0" />
       <LineId Id="2290" Count="0" />
       <LineId Id="2283" Count="0" />
-      <LineId Id="2216" Count="2" />
+      <LineId Id="2216" Count="0" />
+      <LineId Id="2469" Count="1" />
+      <LineId Id="2217" Count="1" />
       <LineId Id="2266" Count="0" />
-      <LineId Id="2291" Count="17" />
-      <LineId Id="2234" Count="4" />
-      <LineId Id="2263" Count="0" />
-      <LineId Id="2239" Count="16" />
+      <LineId Id="2291" Count="1" />
+      <LineId Id="2457" Count="0" />
+      <LineId Id="2293" Count="15" />
+      <LineId Id="2234" Count="0" />
+      <LineId Id="2432" Count="1" />
+      <LineId Id="2235" Count="0" />
+      <LineId Id="2241" Count="14" />
       <LineId Id="1503" Count="0" />
     </LineIds>
   </POU>

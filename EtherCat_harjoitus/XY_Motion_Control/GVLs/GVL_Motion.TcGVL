@@ -68,13 +68,14 @@ VAR_GLOBAL
 
 	
 	iStepPointer        : INT := 1;
-	iSubPhase           : INT := 0;
+	eSubPhase           : E_AutoSeqState := E_AutoSeqState.INIT;
 	iTotalSteps         : INT := 9;
 	
-	
+	// Go to config if u change these settings
 	// This array system holds inside coordinates for the automatic sequence driving
-	// NOTE: Actions of the pneumatic lift are reversed when bRetrievalMode = TRUE
+	// Actions of the pneumatic lift are reversed when bRetrievalMode = TRUE
 	// Automaattisen sekvenssin koordinaatit
+	// Lifterin aktionit päinvaistaiset kun bRetrievalMode = TRUE
 	astPath : ARRAY[1..9] OF ST_MotionStep := [
 		// "Shelf 1" cycle
 		

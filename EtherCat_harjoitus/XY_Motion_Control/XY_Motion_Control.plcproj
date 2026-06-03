@@ -17,6 +17,9 @@
     <LibraryReferences>{54f355db-009a-4dd5-8326-d37e7bb0eb5a}</LibraryReferences>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="DUTs\E_AutoSeqState.TcDUT">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="DUTs\ST_MotionStep.TcDUT">
       <SubType>Code</SubType>
     </Compile>
